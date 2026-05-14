@@ -1,0 +1,35 @@
+name: Test on Windows
+
+on:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+      - run: pip install -r scraper/requirements.txt
+      - name: Run test scrape
+        run: |
+          python -c "
+          from scraper import Config, run_scraper
+          config = Config(
+              search_queries=['CSSD distributor in Africa'],
+              max_search_pages=1,
+              max_search_attempts=1,
+              product_categories=['sterilization', 'surgical'],
+              countries=['South Africa', 'Kenya', 'Nigeria'],
+              phone_prefixes=['+27', '+254', '+234'],
+              phone_patterns=[r'\+\d{1,3}[\s-]?\d{2,4}[\s-]?\d{3,4}[\s-]?\d{3,4}'],
+          )
+          df = run_scraper(config)
+          df.to_excel('test_output.xlsx', index=False)
+          print(f'Done — {len(df)} companies')
+          "
+      - uses: actions/upload-artifact@v4
+        with:
+          name: test-output
+          path: test_output.xlsx

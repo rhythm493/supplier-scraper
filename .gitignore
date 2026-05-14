@@ -1,0 +1,8 @@
+chrome-cache/
+.venv/
+__pycache__/
+*.egg-info/
+.vscode/
+*.pyc
+.DS_Store
+*.log

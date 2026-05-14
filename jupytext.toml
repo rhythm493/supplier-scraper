@@ -1,0 +1,2 @@
+# Jupytext configuration — sync notebooks to clean .py files
+formats = "ipynb,py:percent"
