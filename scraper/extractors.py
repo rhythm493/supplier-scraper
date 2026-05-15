@@ -14,7 +14,9 @@ _PERSON_PATTERNS = [
     re.compile(r"contact\s*(?:person|us|info|sales)?[\s:]+\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,3})\b"),
     re.compile(r"sales\s*(?:contact|manager|director)?[\s:]+\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,3})\b"),
     re.compile(r"managing\s*(?:director|partner)?[\s:]+\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,3})\b"),
-    re.compile(r"(?:ceo|president|director|manager|founder|owner|coordinator)[\s:]+\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,3})\b"),
+    re.compile(
+        r"(?:ceo|president|director|manager|founder|owner|coordinator)[\s:]+\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,3})\b"
+    ),
 ]
 
 _ROLE_PATTERNS = [
