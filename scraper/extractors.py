@@ -6,24 +6,22 @@ from bs4 import BeautifulSoup
 
 from scraper.validators import normalize_country, normalize_email, normalize_phone
 
+_SKIP_WORDS = {"And", "The", "For", "Of", "Our", "Us", "Today", "With", "Your", "This", "That", "From"}
+
+_NAME_PATTERN = re.compile(r"\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,3}\b")
+
 _PERSON_PATTERNS = [
-    re.compile(r"contact\s*(?:person|us|info|sales)?[\s:]+\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,3})\b", re.I),
-    re.compile(r"sales\s*(?:contact|manager|director)?[\s:]+\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,3})\b", re.I),
-    re.compile(r"managing\s*(?:director|partner)?[\s:]+\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,3})\b", re.I),
-    re.compile(
-        r"(?:ceo|president|director|manager|founder|owner|coordinator)[\s:]+\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,3})\b",
-        re.I,
-    ),
+    re.compile(r"contact\s*(?:person|us|info|sales)?[\s:]+\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,3})\b"),
+    re.compile(r"sales\s*(?:contact|manager|director)?[\s:]+\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,3})\b"),
+    re.compile(r"managing\s*(?:director|partner)?[\s:]+\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,3})\b"),
+    re.compile(r"(?:ceo|president|director|manager|founder|owner|coordinator)[\s:]+\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,3})\b"),
 ]
 
 _ROLE_PATTERNS = [
     re.compile(
         r"\b(CEO|President|Managing Director|Sales Manager|Marketing Manager|Operations Manager|General Manager|Technical Manager|Production Manager|Quality Manager|Director|Founder|Owner|Coordinator|Supervisor|Executive)\b",
-        re.I,
     ),
 ]
-
-_NAME_REGEX = re.compile(r"\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,3}\b")
 
 
 def extract_email(html_content: str) -> str | None:
@@ -137,7 +135,7 @@ def extract_contact_person(html_content: str) -> tuple[str, str]:
                 role_match = pattern.search(line)
                 if role_match:
                     role = role_match.group(1)
-                    names_in_line = _NAME_REGEX.findall(line)
+                    names_in_line = _NAME_PATTERN.findall(line)
                     for name in names_in_line:
                         if 4 < len(name) < 60 and " " in name:
                             return name, role
