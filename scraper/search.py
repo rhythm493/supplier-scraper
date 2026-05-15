@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import json
 import logging
+import os
 import random
 import re
 import time
@@ -69,7 +71,7 @@ def google_search(driver: Chrome, query: str, config: Config) -> dict[str, Searc
                 if config.screenshots:
                     _save_screenshot(driver, query, attempt, page)
 
-                page_results = _extract_search_results(driver)
+                page_results = _extract_search_results(driver, config.excluded_sites)
                 if page_results:
                     logger.info("Found %d results on page %d", len(page_results), page)
                     for title, result in page_results.items():
@@ -155,6 +157,54 @@ def wait_for_captcha(driver: Chrome, label: str = "") -> None:
 _wait_for_captcha = wait_for_captcha
 
 
+def _query_slug(query: str) -> str:
+    slug = re.sub(r"[^a-zA-Z0-9]+", "-", query).strip("-").lower()
+    return slug[:80] if len(slug) > 80 else slug
+
+
+def save_search_cache(cache_dir: str, query: str, results: dict[str, SearchResult], config_hash: str) -> None:
+    os.makedirs(cache_dir, exist_ok=True)
+    slug = _query_slug(query)
+    data = [{"title": r.title, "url": r.url} for r in results.values()]
+    path = os.path.join(cache_dir, f"{slug}.json")
+    with open(path, "w") as f:
+        json.dump(data, f, indent=2)
+
+    meta_path = os.path.join(cache_dir, "_meta.json")
+    if os.path.exists(meta_path):
+        with open(meta_path) as f:
+            meta = json.load(f)
+    else:
+        meta = {"config_hash": config_hash, "queries": {}}
+    meta["config_hash"] = config_hash
+    meta["queries"][slug] = {"query": query, "count": len(results)}
+    with open(meta_path, "w") as f:
+        json.dump(meta, f, indent=2)
+
+
+def load_search_cache(cache_dir: str, config_hash: str, queries: list[str]) -> dict[str, SearchResult] | None:
+    meta_path = os.path.join(cache_dir, "_meta.json")
+    if not os.path.exists(meta_path):
+        return None
+    with open(meta_path) as f:
+        meta = json.load(f)
+    if meta.get("config_hash") != config_hash:
+        return None
+    all_results: dict[str, SearchResult] = {}
+    for query in queries:
+        slug = _query_slug(query)
+        path = os.path.join(cache_dir, f"{slug}.json")
+        if not os.path.exists(path):
+            return None
+        with open(path) as f:
+            data = json.load(f)
+        for item in data:
+            name = item["title"]
+            if name not in all_results:
+                all_results[name] = SearchResult(title=name, url=item["url"])
+    return all_results if all_results else None
+
+
 def _random_delay(min_s: float = 0.5, max_s: float = 2.0) -> None:
     time.sleep(random.uniform(min_s, max_s))
 
@@ -168,13 +218,26 @@ def _human_scroll(driver: Chrome, times: int = 2) -> None:
     _random_delay(0.2, 0.5)
 
 
+_SEARCH_SUFFIXES = [
+    "manufacturer",
+    "company",
+    "business",
+    "firm",
+    "supplier",
+    "distributor",
+    "exporter",
+    "vendor",
+    "dealer",
+]
+
+
 def _build_search_url(query: str, attempt: int) -> str:
     if attempt == 0:
         return f"https://www.google.com/search?q={urllib.parse.quote_plus(query)}"
     if attempt == 1:
         return "https://www.google.com"
-    suffixes = ["manufacturer", "company", "business", "firm"]
-    modified = f"{query} {suffixes[attempt % 4]}"
+    suffix = _SEARCH_SUFFIXES[(attempt - 2) % len(_SEARCH_SUFFIXES)]
+    modified = f"{query} {suffix}"
     return f"https://www.google.com/search?q={urllib.parse.quote_plus(modified)}"
 
 
@@ -215,7 +278,7 @@ def _save_screenshot(driver: Chrome, query: str, attempt: int, page: int) -> Non
         logger.error("Failed to save screenshot: %s", e)
 
 
-def _extract_search_results(driver: Chrome) -> dict[str, SearchResult]:
+def _extract_search_results(driver: Chrome, excluded_sites: list[str] | None = None) -> dict[str, SearchResult]:
     results: dict[str, SearchResult] = {}
 
     html = driver.page_source
@@ -251,7 +314,7 @@ def _extract_search_results(driver: Chrome) -> dict[str, SearchResult]:
             if not title:
                 title = "Unknown"
 
-            if _is_valid_result(href):
+            if _is_valid_result(href, excluded_sites):
                 results[title] = SearchResult(title=title, url=href)
         except Exception:
             logger.exception("Error parsing search result")
@@ -284,9 +347,9 @@ def _selenium_fallback(driver: Chrome) -> list:
     return items
 
 
-def _is_valid_result(url: str) -> bool:
+def _is_valid_result(url: str, excluded_sites: list[str] | None = None) -> bool:
     try:
-        excluded_domains = [
+        google_domains = [
             "google.com",
             "google.co",
             "youtube.com",
@@ -295,8 +358,9 @@ def _is_valid_result(url: str) -> bool:
             "support.google.com",
             "maps.google.com",
         ]
+        excluded = list(google_domains) + (excluded_sites or [])
         url_lower = url.lower()
-        return not any(d in url_lower for d in excluded_domains)
+        return not any(d in url_lower for d in excluded)
     except Exception:
         return False
 

@@ -3,6 +3,8 @@ from __future__ import annotations
 import re
 from urllib.parse import urlparse
 
+_IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".gif", ".svg", ".webp", ".ico", ".bmp"}
+
 
 def normalize_email(email: str) -> str | None:
     email = email.strip().lower()
@@ -12,6 +14,12 @@ def normalize_email(email: str) -> str | None:
     domain = email.split("@", 1)[1] if "@" in email else ""
     if domain in exclude_domains:
         return None
+    domain_part = "@" + domain
+    for ext in _IMAGE_EXTENSIONS:
+        if domain_part.endswith(ext):
+            return None
+    if "@2x." in domain_part or "@3x." in domain_part:
+        return None
     return email
 
 
@@ -19,12 +27,27 @@ def normalize_phone(phone: str, prefixes: list[str]) -> str | None:
     cleaned = re.sub(r"[\s\-\(\)\.]", "", phone)
     if not cleaned or not cleaned[-1].isdigit():
         return None
-    for prefix in sorted(prefixes, key=len, reverse=True):
-        stripped_prefix = re.sub(r"\D", "", prefix)
-        if cleaned.startswith(stripped_prefix):
-            return f"{prefix} {cleaned[len(stripped_prefix) :]}"
-        if len(stripped_prefix) <= len(cleaned) and cleaned[: len(stripped_prefix)].isdigit():
-            return cleaned
+
+    digits = re.sub(r"\D", "", cleaned)
+    if len(digits) < 7 or len(digits) > 14:
+        return None
+
+    if re.match(r"^(\d)\1{5,}$", digits):
+        return None
+
+    stripped_prefixes = sorted(
+        [(re.sub(r"\D", "", p), p) for p in prefixes if re.sub(r"\D", "", p)],
+        key=lambda x: len(x[0]),
+        reverse=True,
+    )
+    for stripped, original in stripped_prefixes:
+        if cleaned.startswith(stripped):
+            rest = cleaned[len(stripped) :]
+            return f"{original} {rest}" if rest else original
+
+    if len(digits) >= 9:
+        return cleaned
+
     return None
 
 

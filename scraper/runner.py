@@ -12,7 +12,7 @@ import pandas as pd
 
 from scraper.dedup import deduplicate
 from scraper.pipeline import extract_company_info
-from scraper.search import google_search
+from scraper.search import google_search, load_search_cache, save_search_cache
 from scraper.types import SearchResult
 
 if TYPE_CHECKING:
@@ -96,25 +96,60 @@ def run_scraper(
     all_rows: list[dict[str, str]] = []
 
     try:
-        # Phase 1: Search — single browser
-        from scraper.browser import setup_driver
+        # Phase 1: Search — check cache first
+        cache_dir = config.cache_dir
+        config_hash = config.search_config_hash()
+        all_results = load_search_cache(cache_dir, config_hash, config.search_queries)
 
-        all_results: dict[str, SearchResult] = {}
-        search_driver = setup_driver(use_undetected=True, page_load_timeout=config.page_load_timeout)
-        try:
-            for query in config.search_queries:
-                logger.info("=== Search query: %s ===", query)
-                for name, result in google_search(search_driver, query, config).items():
-                    if name not in all_results:
-                        all_results[name] = result
-        finally:
+        if all_results is not None:
+            logger.info("Loaded %d companies from search cache (%s)", len(all_results), cache_dir)
+        else:
+            logger.info("No valid cache — running Google search")
+            from scraper.browser import setup_driver
+
+            all_results = {}
+            search_driver = setup_driver(use_undetected=True, page_load_timeout=config.page_load_timeout)
             try:
-                search_driver.quit()
-            except Exception:
-                pass
+                for query in config.search_queries:
+                    logger.info("=== Search query: %s ===", query)
+                    query_results = google_search(search_driver, query, config)
+                    save_search_cache(cache_dir, query, query_results, config_hash)
+                    for name, result in query_results.items():
+                        if name not in all_results:
+                            all_results[name] = result
+            finally:
+                try:
+                    search_driver.quit()
+                except Exception:
+                    pass
 
         logger.info("Found %d unique companies", len(all_results))
         items = list(all_results.items())
+        if not items:
+            return pd.DataFrame(columns=COLUMNS)
+
+        _GENERIC_TITLES = {
+            "about",
+            "about us",
+            "products",
+            "product",
+            "packaging",
+            "home",
+            "home page",
+            "contact",
+            "contact us",
+            "services",
+            "our services",
+            "overview",
+            "company name",
+            "our products",
+            "all products",
+            "categories",
+            "shop",
+            "store",
+            "our company",
+        }
+        items = [(n, r) for n, r in items if n.strip().lower() not in _GENERIC_TITLES]
         if not items:
             return pd.DataFrame(columns=COLUMNS)
 

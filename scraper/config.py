@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import hashlib
+import json
+import os
 from dataclasses import dataclass, field
 
 DEFAULT_USER_AGENTS = [
@@ -32,3 +35,19 @@ class Config:
 
     output_filename: str = "suppliers.xlsx"
     log_filename: str = "scraper.log"
+
+    def search_config_hash(self) -> str:
+        parts = {
+            "search_queries": sorted(self.search_queries),
+            "max_search_pages": self.max_search_pages,
+            "max_search_attempts": self.max_search_attempts,
+            "excluded_sites": sorted(self.excluded_sites),
+        }
+        raw = json.dumps(parts, sort_keys=True, default=str)
+        return hashlib.sha256(raw.encode()).hexdigest()[:16]
+
+    @property
+    def cache_dir(self) -> str:
+        base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        name = os.path.splitext(os.path.basename(self.output_filename))[0]
+        return os.path.join(base, "cache", name)

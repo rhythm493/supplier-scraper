@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import re
 
 from bs4 import BeautifulSoup
@@ -8,22 +9,56 @@ from scraper.validators import normalize_country, normalize_email, normalize_pho
 
 _SKIP_WORDS = {"And", "The", "For", "Of", "Our", "Us", "Today", "With", "Your", "This", "That", "From"}
 
+_COMPANY_INDICATORS = {"Pvt", "Ltd", "GmbH", "Inc", "LLC", "Company", "Industries", "Corporation", "Corp", "Limited"}
+_NON_PERSON_WORDS = {"User", "Admin", "Super"}
+
 _NAME_PATTERN = re.compile(r"\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,3}\b")
 
 _PERSON_PATTERNS = [
-    re.compile(r"contact\s*(?:person|us|info|sales)?[\s:]+\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,3})\b"),
-    re.compile(r"sales\s*(?:contact|manager|director)?[\s:]+\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,3})\b"),
-    re.compile(r"managing\s*(?:director|partner)?[\s:]+\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,3})\b"),
+    re.compile(r"(?i:contact\s*(?:person|us|info|sales))[\s:]+\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,3})\b"),
+    re.compile(r"(?i:sales\s*(?:contact|manager|director))[\s:]+\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,3})\b"),
+    re.compile(r"(?i:managing\s*(?:director|partner))[\s:]+\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,3})\b"),
     re.compile(
-        r"(?:ceo|president|director|manager|founder|owner|coordinator)[\s:]+\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,3})\b"
+        r"(?i:ceo|president|director|manager|founder|owner|coordinator)[\s:]+\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,3})\b",
+    ),
+    re.compile(
+        r"\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,3})\s*[—–\-|]\s*"
+        r"((?i:ceo|president|managing\s+director|director|manager|founder|owner|"
+        r"coordinator|supervisor|executive|engineer|technician|specialist|analyst|"
+        r"consultant|lead|head|chief|officer|partner|representative|assistant|associate)"
+        r"(?:\s+(?:of|and|&|the|operations|sales|marketing|quality|production|technical|"
+        r"general|finance|hr|rd|engineering|logistics|procurement|bd|customer|product|"
+        r"design|manufacturing)){0,3})\b"
+    ),
+    re.compile(
+        r"\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,3})\s*\(((?i:ceo|president|director|manager|"
+        r"founder|owner|coordinator|supervisor|executive))\s*\)"
     ),
 ]
 
 _ROLE_PATTERNS = [
     re.compile(
-        r"\b(CEO|President|Managing Director|Sales Manager|Marketing Manager|Operations Manager|General Manager|Technical Manager|Production Manager|Quality Manager|Director|Founder|Owner|Coordinator|Supervisor|Executive)\b",
+        r"\b((?i:CEO|President|Managing Director|Sales Manager|Marketing Manager|Operations Manager|General Manager|Technical Manager|Production Manager|Quality Manager|Director|Founder|Owner|Coordinator|Supervisor|Executive))\b",
     ),
 ]
+_ROLE_NORMALIZE = {
+    "ceo": "CEO",
+    "president": "President",
+    "director": "Director",
+    "founder": "Founder",
+    "owner": "Owner",
+    "coordinator": "Coordinator",
+    "supervisor": "Supervisor",
+    "executive": "Executive",
+    "managing director": "Managing Director",
+    "sales manager": "Sales Manager",
+    "marketing manager": "Marketing Manager",
+    "operations manager": "Operations Manager",
+    "general manager": "General Manager",
+    "technical manager": "Technical Manager",
+    "production manager": "Production Manager",
+    "quality manager": "Quality Manager",
+}
 
 
 def extract_email(html_content: str) -> str | None:
@@ -43,16 +78,39 @@ def extract_email(html_content: str) -> str | None:
         return None
 
 
+_PHONE_KEYWORDS = ["phone", "tel", "cell", "mob", "call us", "contact", "whatsapp", "telephone"]
+
+
 def extract_phone(html_content: str, phone_patterns: list[str], prefixes: list[str]) -> str | None:
     try:
         soup = BeautifulSoup(html_content, "html.parser")
         text_content = soup.get_text()
 
+        lines = [ln.strip() for ln in text_content.split("\n") if ln.strip()]
+
+        kw_lines: list[str] = []
+        other_lines: list[str] = []
+        for ln in lines:
+            lower = ln.lower()
+            if any(kw in lower for kw in _PHONE_KEYWORDS):
+                kw_lines.append(ln)
+            else:
+                other_lines.append(ln)
+
+        for pattern in phone_patterns:
+            for ln in kw_lines:
+                matches = re.findall(pattern, ln)
+                if not matches:
+                    continue
+                for phone in matches:
+                    normalized = normalize_phone(phone.strip(), prefixes)
+                    if normalized:
+                        return normalized
+
         for pattern in phone_patterns:
             matches = re.findall(pattern, text_content)
             if not matches:
                 continue
-
             phone = matches[0].strip()
             normalized = normalize_phone(phone, prefixes)
             if normalized:
@@ -110,36 +168,245 @@ def extract_products(html_content: str, categories: list[str]) -> list[str]:
         return []
 
 
+def _is_valid_person_name(name: str) -> bool:
+    if len(name) < 5 or len(name) > 50:
+        return False
+    if " " not in name:
+        return False
+    words = name.split()
+    if len(words) > 5:
+        return False
+    if set(words).issubset(_SKIP_WORDS):
+        return False
+    if any(c in name for c in ("@", "http", "www.", ".com", ".co.", ".in")):
+        return False
+    if any(p.search(name) for p in _ROLE_PATTERNS):
+        return False
+    for word in words:
+        if word in _COMPANY_INDICATORS:
+            return False
+        if word in _NON_PERSON_WORDS:
+            return False
+    return True
+
+
+def _extract_schema_person(soup: BeautifulSoup) -> tuple[str, str] | None:
+    for script in soup.find_all("script", type="application/ld+json"):
+        try:
+            data = json.loads(script.string)
+            items = data if isinstance(data, list) else [data]
+            for item in items:
+                if isinstance(item, dict) and item.get("@type") in ("Person", "Organization"):
+                    if item["@type"] == "Person":
+                        name = item.get("name", "")
+                        if isinstance(name, str) and _is_valid_person_name(name):
+                            role = item.get("jobTitle", "") or item.get("description", "") or ""
+                            role = role if isinstance(role, str) and _is_valid_role(role) else "Not Found"
+                            return name, role
+                    member = item.get("founder") or item.get("employee") or item.get("member")
+                    if isinstance(member, dict) and member.get("@type") == "Person":
+                        name = member.get("name", "")
+                        if isinstance(name, str) and _is_valid_person_name(name):
+                            return name, "Not Found"
+        except Exception:
+            continue
+    return None
+
+
+def _try_name_from_email(html_content: str) -> tuple[str, str] | None:
+    pattern = r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}"
+    emails = re.findall(pattern, html_content)
+    for email in emails:
+        local = email.split("@")[0]
+        if "." in local and not local.startswith(("contact", "info", "sales", "support", "admin", "enquiry")):
+            parts = local.split(".")
+            if all(p.isalpha() and p[0].isupper() is False for p in parts):
+                name = " ".join(p.capitalize() for p in parts)
+                if _is_valid_person_name(name):
+                    return name, "Not Found"
+    return None
+
+
+def _find_name_near_email(lines: list[str]) -> tuple[str, str] | None:
+    for line in lines:
+        if "@" not in line:
+            continue
+        names = _NAME_PATTERN.findall(line)
+        for name in names:
+            if _is_valid_person_name(name):
+                role = _extract_role(line, name) or "Not Found"
+                return name, role
+    return None
+
+
+def _is_valid_role(role: str) -> bool:
+    return bool(role) and len(role) < 60
+
+
+_TEAM_KEYWORDS = [
+    "our team",
+    "team",
+    "board of directors",
+    "board members",
+    "board",
+    "management",
+    "leadership",
+    "our people",
+    "key personnel",
+    "executives",
+    "management team",
+    "executive team",
+    "our staff",
+    "organizational structure",
+    "meet the team",
+    "meet our team",
+    "team members",
+]
+_MEMBER_CLASSES = re.compile(r"team|member|person|staff|executive|board|profile|leadership|founder", re.IGNORECASE)
+_ROLE_CLASSES = re.compile(r"role|title|position|designation|job", re.IGNORECASE)
+
+
+def _extract_team_page_bs4(soup: BeautifulSoup) -> tuple[str, str] | None:
+    """Extract person name + role from team/board HTML page structures.
+
+    Handles:
+      - <div class=\"team-member\"><h3>Name</h3><p>Role</p></div>
+      - <li><strong>Name</strong> — Role</li>
+      - <table><tr><td>Name</td><td>Role</td></tr></table>
+      - Consecutive lines Name / Role under a \"Our Team\" header
+    """
+    # 1. Structured member containers with class hints
+    for container in soup.find_all(["div", "li", "article"], class_=_MEMBER_CLASSES):
+        name_el = container.find(["h2", "h3", "h4", "h5", "strong", "b"])
+        if not name_el:
+            continue
+        name = name_el.get_text(strip=True)
+        if not _is_valid_person_name(name):
+            continue
+        role_text = _get_role_text_from_container(container, name_el)
+        if role_text:
+            return name, role_text
+
+    # 2. Table rows (Name | Role in <td> pairs)
+    for row in soup.find_all("tr"):
+        cells = row.find_all("td")
+        if len(cells) >= 2:
+            name = cells[0].get_text(strip=True)
+            if not _is_valid_person_name(name):
+                continue
+            role_match = _ROLE_PATTERNS[0].search(cells[1].get_text(strip=True))
+            if role_match:
+                return name, _normalize_role(role_match.group(1))
+
+    # 3. Team sections identified by header keywords
+    for tag in ["h1", "h2", "h3", "h4"]:
+        for header in soup.find_all(tag):
+            if header.get_text(strip=True).lower() not in _TEAM_KEYWORDS:
+                continue
+            parent = header.parent
+            container_text = parent.get_text("\n") if parent else ""
+            blob_lines = [ln.strip() for ln in container_text.split("\n") if ln.strip()]
+            start = next((i for i, ln in enumerate(blob_lines) if ln.lower() in _TEAM_KEYWORDS), 1)
+            for i in range(start, len(blob_lines) - 1):
+                if not _is_valid_person_name(blob_lines[i]):
+                    continue
+                name = blob_lines[i]
+                for j in range(i + 1, min(i + 4, len(blob_lines))):
+                    rm = _ROLE_PATTERNS[0].search(blob_lines[j])
+                    if rm:
+                        has_interleaved = any(_is_valid_person_name(blob_lines[k]) for k in range(i + 1, j))
+                        if not has_interleaved:
+                            return name, _normalize_role(rm.group(1))
+
+    return None
+
+
+def _get_role_text_from_container(container, name_el) -> str | None:
+    """Look for a role string near *name_el* inside *container*."""
+    # By class hint
+    role_el = container.find(["p", "span", "small", "em", "div"], class_=_ROLE_CLASSES)
+    if not role_el:
+        # Sibling of name element
+        role_el = name_el.find_next_sibling(["p", "span", "small", "em"])
+    if not role_el:
+        # Any paragraph / span in container
+        role_el = container.find(["p", "span", "small"])
+    if not role_el:
+        return None
+    text = role_el.get_text(strip=True)
+    rm = _ROLE_PATTERNS[0].search(text)
+    if rm:
+        return _normalize_role(rm.group(1))
+    # Fallback: check same line as name for separator pattern
+    line = name_el.parent.get_text(strip=True) if name_el.parent else ""
+    if not line:
+        return None
+    for sep in ("—", "–", "-", "|"):
+        if sep in line:
+            parts = line.split(sep, 1)
+            if _is_valid_person_name(parts[0].strip()):
+                rm = _ROLE_PATTERNS[0].search(parts[1].strip())
+                if rm:
+                    return _normalize_role(rm.group(1))
+    return None
+
+
 def extract_contact_person(html_content: str) -> tuple[str, str]:
     try:
         soup = BeautifulSoup(html_content, "html.parser")
         text_content = soup.get_text()
 
+        # 1. Meta author tag
         author_tag = soup.find("meta", attrs={"name": "author"})
         if hasattr(author_tag, "get"):
             content = author_tag.get("content")  # type: ignore[union-attr]
-            if content and isinstance(content, str):
+            if content and isinstance(content, str) and _is_valid_person_name(content.strip()):
                 return content.strip(), "Not Found"
+
+        # 2. Schema.org JSON-LD
+        schema_result = _extract_schema_person(soup)
+        if schema_result:
+            return schema_result
 
         lines = [ln.strip() for ln in text_content.split("\n") if ln.strip()]
 
+        # 3. Name from email local part
+        email_name = _try_name_from_email(html_content)
+        if email_name:
+            return email_name
+
+        # 4. Name on same line as email
+        near_email = _find_name_near_email(lines)
+        if near_email:
+            return near_email
+
+        # 5. Team page BS4 structural extraction (container divs, table rows, team sections)
+        team_result = _extract_team_page_bs4(soup)
+        if team_result:
+            return team_result
+
+        # 6. Contextual person patterns (also handles "Name — Role" via group 2)
         for pattern in _PERSON_PATTERNS:
             for line in lines:
                 match = pattern.search(line)
                 if match:
                     name = match.group(1).strip()
-                    if 4 < len(name) < 60 and " " in name:
-                        role = _extract_role(line, name) or "Not Found"
+                    if _is_valid_person_name(name):
+                        if match.lastindex and match.lastindex >= 2:
+                            role = match.group(2).strip()
+                        else:
+                            role = _extract_role(line, name) or "Not Found"
                         return name, role
 
+        # 7. Role-prefixed names
         for pattern in _ROLE_PATTERNS:
             for line in lines:
                 role_match = pattern.search(line)
                 if role_match:
-                    role = role_match.group(1)
+                    role = _normalize_role(role_match.group(1))
                     names_in_line = _NAME_PATTERN.findall(line)
                     for name in names_in_line:
-                        if 4 < len(name) < 60 and " " in name:
+                        if _is_valid_person_name(name):
                             return name, role
 
         return "Not Found", "Not Found"
@@ -147,10 +414,14 @@ def extract_contact_person(html_content: str) -> tuple[str, str]:
         return "Not Found", "Not Found"
 
 
+def _normalize_role(role: str) -> str:
+    return _ROLE_NORMALIZE.get(role.lower(), role)
+
+
 def _extract_role(line: str, name: str) -> str | None:
     cleaned = line.replace(name, "").strip().lstrip(":-—–,;").strip()
     for pattern in _ROLE_PATTERNS:
         match = pattern.search(cleaned)
         if match:
-            return match.group(1)
+            return _normalize_role(match.group(1))
     return None

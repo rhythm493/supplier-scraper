@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 _CFT_API = "https://googlechromelabs.github.io/chrome-for-testing/last-known-good-versions-with-downloads.json"
 _PROJECT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-_CFT_CACHE = os.path.join(_PROJECT_DIR, "chrome-cache")
+_CFT_CACHE = os.path.join(_PROJECT_DIR, "cache", "chrome")
 
 
 def _find_chrome_binary() -> str | None:

@@ -1,4 +1,4 @@
-chrome-cache/
+cache/
 .venv/
 __pycache__/
 *.egg-info/
@@ -7,3 +7,4 @@ __pycache__/
 .DS_Store
 *.log
 *.xlsx
+out/
