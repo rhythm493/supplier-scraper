@@ -11,6 +11,8 @@ class ContactInfo:
     state: str = "Not Found"
     city: str = "Not Found"
     products: str = ""
+    contact_person: str = "Not Found"
+    position: str = "Not Found"
 
     def is_contact_found(self) -> bool:
         return any(v != "Not Found" for v in (self.email, self.phone, self.country, self.state, self.city))

@@ -25,7 +25,7 @@ Search Google for suppliers/manufacturers, visit their websites, and extract con
 
 ## Output Columns
 
-Company Name | State | City | Country | Phone Number | Email | Website | Products
+Company Name | Contact Person | Position | State | City | Country | Phone Number | Email | Website | Products
 
 ## Need Help?
 

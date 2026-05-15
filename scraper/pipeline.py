@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 
 from bs4 import BeautifulSoup
 
-from scraper.extractors import extract_country, extract_email, extract_phone, extract_products
+from scraper.extractors import extract_contact_person, extract_country, extract_email, extract_phone, extract_products
 from scraper.types import ContactInfo
 
 if TYPE_CHECKING:
@@ -36,6 +36,11 @@ def extract_company_info(driver: Chrome, url: str, name: str, config: Config) ->
         contact.email = extract_email(html) or "Not Found"
         contact.phone = extract_phone(html, config.phone_patterns, config.phone_prefixes) or "Not Found"
         contact.country = extract_country(html, config.countries, config.country_keywords) or "Not Found"
+
+        person, role = extract_contact_person(html)
+        if person != "Not Found":
+            contact.contact_person = person
+            contact.position = role
 
         if contact.email == "Not Found" or contact.phone == "Not Found":
             contact_url = _find_page(driver, url, config.contact_keywords)
@@ -86,6 +91,8 @@ def _scrape_page(driver: Chrome, page_url: str, config: Config, existing: Contac
             country=existing.country,
             state=existing.state,
             city=existing.city,
+            contact_person=existing.contact_person,
+            position=existing.position,
         )
 
         if contact.email == "Not Found":
@@ -102,6 +109,12 @@ def _scrape_page(driver: Chrome, page_url: str, config: Config, existing: Contac
             country = extract_country(html, config.countries, config.country_keywords)
             if country:
                 contact.country = country
+
+        if contact.contact_person == "Not Found":
+            person, role = extract_contact_person(html)
+            if person != "Not Found":
+                contact.contact_person = person
+                contact.position = role
 
         return contact
 

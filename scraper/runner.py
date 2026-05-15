@@ -21,7 +21,18 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 NUM_WORKERS = 4
-COLUMNS = ["Company Name", "State", "City", "Country", "Phone Number", "Email", "Website", "Products"]
+COLUMNS = [
+    "Company Name",
+    "Contact Person",
+    "Position",
+    "State",
+    "City",
+    "Country",
+    "Phone Number",
+    "Email",
+    "Website",
+    "Products",
+]
 
 
 def _save_checkpoint(df: pd.DataFrame, output_path: str) -> None:
@@ -51,6 +62,8 @@ def _process_chunk(
                     chunk_results.append(
                         {
                             "Company Name": company_name,
+                            "Contact Person": contact.contact_person,
+                            "Position": contact.position,
                             "State": contact.state,
                             "City": contact.city,
                             "Country": contact.country,

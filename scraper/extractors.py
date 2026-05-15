@@ -6,6 +6,25 @@ from bs4 import BeautifulSoup
 
 from scraper.validators import normalize_country, normalize_email, normalize_phone
 
+_PERSON_PATTERNS = [
+    re.compile(r"contact\s*(?:person|us|info|sales)?[\s:]+\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,3})\b", re.I),
+    re.compile(r"sales\s*(?:contact|manager|director)?[\s:]+\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,3})\b", re.I),
+    re.compile(r"managing\s*(?:director|partner)?[\s:]+\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,3})\b", re.I),
+    re.compile(
+        r"(?:ceo|president|director|manager|founder|owner|coordinator)[\s:]+\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,3})\b",
+        re.I,
+    ),
+]
+
+_ROLE_PATTERNS = [
+    re.compile(
+        r"\b(CEO|President|Managing Director|Sales Manager|Marketing Manager|Operations Manager|General Manager|Technical Manager|Production Manager|Quality Manager|Director|Founder|Owner|Coordinator|Supervisor|Executive)\b",
+        re.I,
+    ),
+]
+
+_NAME_REGEX = re.compile(r"\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,3}\b")
+
 
 def extract_email(html_content: str) -> str | None:
     try:
@@ -89,3 +108,49 @@ def extract_products(html_content: str, categories: list[str]) -> list[str]:
         return found
     except Exception:
         return []
+
+
+def extract_contact_person(html_content: str) -> tuple[str, str]:
+    try:
+        soup = BeautifulSoup(html_content, "html.parser")
+        text_content = soup.get_text()
+
+        author_tag = soup.find("meta", attrs={"name": "author"})
+        if hasattr(author_tag, "get"):
+            content = author_tag.get("content")  # type: ignore[union-attr]
+            if content and isinstance(content, str):
+                return content.strip(), "Not Found"
+
+        lines = [ln.strip() for ln in text_content.split("\n") if ln.strip()]
+
+        for pattern in _PERSON_PATTERNS:
+            for line in lines:
+                match = pattern.search(line)
+                if match:
+                    name = match.group(1).strip()
+                    if 4 < len(name) < 60 and " " in name:
+                        role = _extract_role(line, name) or "Not Found"
+                        return name, role
+
+        for pattern in _ROLE_PATTERNS:
+            for line in lines:
+                role_match = pattern.search(line)
+                if role_match:
+                    role = role_match.group(1)
+                    names_in_line = _NAME_REGEX.findall(line)
+                    for name in names_in_line:
+                        if 4 < len(name) < 60 and " " in name:
+                            return name, role
+
+        return "Not Found", "Not Found"
+    except Exception:
+        return "Not Found", "Not Found"
+
+
+def _extract_role(line: str, name: str) -> str | None:
+    cleaned = line.replace(name, "").strip().lstrip(":-—–,;").strip()
+    for pattern in _ROLE_PATTERNS:
+        match = pattern.search(cleaned)
+        if match:
+            return match.group(1)
+    return None
