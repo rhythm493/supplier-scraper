@@ -3,6 +3,7 @@ from __future__ import annotations
 import concurrent.futures
 import logging
 import os
+import re
 import sys
 import tempfile
 from collections.abc import Callable
@@ -44,6 +45,18 @@ def _save_checkpoint(df: pd.DataFrame, output_path: str) -> None:
         logger.warning("openpyxl not available, saved CSV: %s", csv_path)
 
 
+def _is_valid_url(url: str) -> bool:
+    if not url.startswith(("http://", "https://")):
+        return False
+    if "google.com/search" in url or url.startswith("/search"):
+        return False
+    if re.search(r"(?:^|://)(?:www\.)?(?:facebook|twitter|x)\.com/", url):
+        return False
+    if url.endswith(".pdf"):
+        return False
+    return True
+
+
 def _process_chunk(
     company_items: list[tuple[str, SearchResult]],
     config: Config,
@@ -56,6 +69,9 @@ def _process_chunk(
 
     try:
         for company_name, search_result in company_items:
+            if not _is_valid_url(search_result.url):
+                logger.info("Skipping invalid URL: %s", search_result.url)
+                continue
             try:
                 contact = extract_company_info(driver, search_result.url, company_name, config)
                 if contact is not None:
@@ -214,4 +230,19 @@ def _setup_logging(config: Config) -> None:
             )
         )
         root.addHandler(handler)
+
+        cache_dir = config.cache_dir
+        os.makedirs(cache_dir, exist_ok=True)
+        log_path = os.path.join(cache_dir, config.log_filename)
+        file_handler = logging.FileHandler(log_path, mode="a", encoding="utf-8")
+        file_handler.setLevel(logging.INFO)
+        file_handler.setFormatter(
+            logging.Formatter(
+                "%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+                datefmt="%H:%M:%S",
+            )
+        )
+        root.addHandler(file_handler)
+        logger.info("Logging to %s", log_path)
+
     logger.info("Scraper started — queries: %d, workers: %d", len(config.search_queries), NUM_WORKERS)

@@ -200,7 +200,8 @@ def setup_driver(
         try:
             return _setup_undetected(chrome_path, driver_path, page_load_timeout)
         except Exception as e:
-            logger.warning("Undetected ChromeDriver failed (%s), falling back to regular driver", e)
+            msg = str(e).split("\n")[0] if e else "unknown"
+            logger.warning("Undetected ChromeDriver: %s — falling back to regular driver", msg)
 
     return _setup_regular(chrome_path, driver_path, page_load_timeout, use_undetected=False)
 

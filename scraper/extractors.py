@@ -9,8 +9,230 @@ from scraper.validators import normalize_country, normalize_email, normalize_pho
 
 _SKIP_WORDS = {"And", "The", "For", "Of", "Our", "Us", "Today", "With", "Your", "This", "That", "From"}
 
-_COMPANY_INDICATORS = {"Pvt", "Ltd", "GmbH", "Inc", "LLC", "Company", "Industries", "Corporation", "Corp", "Limited"}
-_NON_PERSON_WORDS = {"User", "Admin", "Super"}
+_COMPANY_INDICATORS = {
+    "Pvt",
+    "Ltd",
+    "GmbH",
+    "Inc",
+    "LLC",
+    "Company",
+    "Industries",
+    "Corporation",
+    "Corp",
+    "Limited",
+    "Healthcare",
+    "Systems",
+    "Solutions",
+    "Supplies",
+    "Services",
+    "Products",
+    "Product",
+    "Equipment",
+    "Technologies",
+    "Enterprises",
+    "Infrastructure",
+    "Distribution",
+    "Manufacturing",
+    "Portfolio",
+    "Business",
+    "Network",
+    "Supplier",
+    "Suppliers",
+    "Manufacturer", "Manufacturers",
+    "Device",
+    "Devices",
+    "Instruments",
+    "Health",
+    "Estate",
+    "Organization",
+    "Platforms",
+    "Meta",
+}
+_NON_PERSON_WORDS = {
+    # Existing
+    "User", "Admin", "Super", "Cookie", "Policy", "Select",
+    "Page", "Home", "Returns", "Profile", "Overview",
+    "Uniforms", "Accessories", "Login", "Register", "Sign",
+    "Search", "Menu", "Navigation",
+    "National", "International", "Regional", "Local",
+    "Contact", "About", "Learn", "More", "Mail", "Eg", "Sample",
+    "Loading", "Submit", "Please",
+    # Geography / region — not person names
+    "Africa", "African", "Saharan", "Southern", "Northern",
+    "Eastern", "Western",
+    "Arabia", "Bahrain", "Kuwait", "Saudi", "States", "United",
+    # Street / address
+    "Street", "Road", "Lane", "Drive", "Avenue", "Highway",
+    "Way", "Park", "Office", "Village", "Township", "Ave",
+    "Rd", "Coast", "Floor", "Ground", "Old", "Glen",
+    "Postal", "Address", "Blvd",
+    # Business / org
+    "Institute", "Platform", "Portal", "Hub", "Centre", "Center",
+    "Tel", "Data", "Management",
+    "Training", "News", "Certificates",
+    "Distributor", "Distributors", "Wholesaler", "Wholesalers",
+    "Preventative", "Maintenance", "Program", "Programme", "Programmes",
+    "Additional", "Information",
+    "Industry", "Supply", "Department", "Authority",
+    "Regulatory", "Policies", "Terms", "Use",
+    "Site", "Request", "Forgery",
+    "Seminars",
+    # Products — not persons
+    "Products", "Reels", "Reel", "Gown", "Gowns", "Pouch", "Pouches",
+    "Bag", "Bags", "Wrap", "Wraps",
+    "Portfolio", "Sterilization",
+    "Wrapping", "Machine", "Over",
+    "Animal", "Feed",
+    "Better", "Care",
+    "Cape", "Town",
+    "Central", "Sterile",
+    "Hellenic",
+    # Commerce / UI labels
+    "All", "Compare",
+    "Feel", "Free", "Help",
+    "Mobile", "No", "Need", "Name", "Full",
+    "Near", "Support",
+    "Instant", "Quote", "Shop", "Doe",
+    "Message", "Related", "Substances", "Act",
+    "Good", "Double", "Deluxe", "Practice",
+    "Beauty",
+    "Launch", "Sale",
+    "Get", "Started", "Speak", "Self", "Sealable", "Dick",
+    "Appliance", "Parts", "Arclight", "Diagnostics",
+    "Developed", "Kids", "Toys",
+    "Holy", "Grail", "Major", "General", "El",
+    # Medical / infection control
+    "Acquired", "Autoclave", "Autoclaves", "Consumables",
+    "Control", "Hospital", "Infection", "Infections",
+    "Laundry", "Market",
+    "Soap", "Bar", "Packing", "Sterilizer", "Steam",
+    "Instrument",
+    "Mill", "Roller", "Rollers", "Stamping", "Table", "Top", "Triple", "Beaded",
+    "Electronics", "Solar", "Charging", "Vertical",
+    "Semi", "Automatic", "Operating", "Pan", "Track",
+    "Ethylene", "Oxide", "Indicator", "Indicators", "Tapes",
+    "Aluminium", "Casting",
+    "Air", "Ring", "Aluminum", "Heat",
+    "Ultrasonic", "Cleaner", "Washer", "Disinfector",
+    "Layer", "Film", "Extrusion", "Line",
+    "Pass", "Box", "Rack",
+    # Company / business terms
+    "Averda", "Based", "Black", "Economic", "Empowerment",
+    "Cardiology", "Working", "Groups",
+    "Largest",
+    "Flat", "Rolls",
+    "Pre",
+    "Growthpoint",
+    "Commercial", "Vehicles", "House",
+    # Tech
+    "Sitecore", "Engagement", "Analytics",
+    # Product / equipment names
+    "Printed", "Wrapper",
+    "Seal", "Cover",
+    "Sports", "Boating",
+    "Trolley", "Scrub", "Station",
+    "Stainless",
+    "Inch", "Plane",
+    "Medical", "Waste", "Shredder", "Integrated",
+    "Medicine", "Books",
+    "Master",
+    "Boutique", "Automotive", "Car",
+    "Doctor", "Blade",
+    "High", "Spin",
+    "Leading", "Organisations",
+    "Gown", "Gowns",
+    "Surgeon", "Surgical",
+    "Disposable",
+    "Protective",
+    "Packaging",
+    "Garden", "Dining",
+    "Non", "Woven", "Mask", "Making",
+    "Soft", "Mount",
+    "Littmann", "Classic",
+    "Kg", "Price",
+    "Mechanical", "Shaft",
+    "Secure", "Payments",
+    "Approval", "Certificate",
+    "Safety",
+    "Service",
+    # UI / common words
+    "You", "Are",
+}
+_NOISE_WORDS = {
+    "And",
+    "The",
+    "For",
+    "Of",
+    "Our",
+    "Us",
+    "Today",
+    "With",
+    "Your",
+    "This",
+    "That",
+    "From",
+    "South",
+    "North",
+    "East",
+    "West",
+    "Central",
+    "Supreme",
+    "Medical",
+    "Surgical",
+    "Africa",
+    "Industrial",
+    "Cardiovascular",
+    "Numbers",
+    "Media",
+    "Share",
+    "Rights",
+    "Contact",
+    "Products",
+    "Product",
+    "Portfolio",
+    "Healthcare",
+    "Systems",
+    "Solutions",
+    "Supplies",
+    "Services",
+    "Equipment",
+    "Technologies",
+    "Enterprises",
+    "Distribution",
+    "Manufacturing",
+    "Business",
+    "Network",
+    "Cookie",
+    "Policy",
+    "Select",
+    "Page",
+    "Home",
+    "Returns",
+    "Profile",
+    "Overview",
+    "Uniforms",
+    "Accessories",
+    "Login",
+    "Register",
+    "Sign",
+    "Search",
+    "Menu",
+    "Navigation",
+    "National",
+    "International",
+    "Regional",
+    "Local",
+    "Pvt",
+    "Ltd",
+    "GmbH",
+    "Inc",
+    "LLC",
+    "Company",
+    "Industries",
+    "Corporation",
+    "Corp",
+    "Limited",
+}
 
 _NAME_PATTERN = re.compile(r"\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,3}\b")
 
@@ -38,7 +260,12 @@ _PERSON_PATTERNS = [
 
 _ROLE_PATTERNS = [
     re.compile(
-        r"\b((?i:CEO|President|Managing Director|Sales Manager|Marketing Manager|Operations Manager|General Manager|Technical Manager|Production Manager|Quality Manager|Director|Founder|Owner|Coordinator|Supervisor|Executive))\b",
+        r"\b((?i:CEO|President|Managing Director|Sales Manager|Marketing Manager|"
+        r"Operations Manager|General Manager|Technical Manager|Production Manager|"
+        r"Quality Manager|Director|Founder|Owner|Coordinator|Supervisor|Executive|"
+        r"C\.E\.O\.|M\.D\.|VP|Vice\s*President|Head\s+of|Lead|Chief|Officer|"
+        r"Engineer|Technician|Specialist|Analyst|Consultant|Representative|"
+        r"Assistant|Associate|Manager|Superintendent|Administrator))\b",
     ),
 ]
 _ROLE_NORMALIZE = {
@@ -58,6 +285,25 @@ _ROLE_NORMALIZE = {
     "technical manager": "Technical Manager",
     "production manager": "Production Manager",
     "quality manager": "Quality Manager",
+    "c.e.o.": "CEO",
+    "m.d.": "Managing Director",
+    "vp": "VP",
+    "vice president": "Vice President",
+    "head of": "Head",
+    "chief": "Chief",
+    "officer": "Officer",
+    "engineer": "Engineer",
+    "technician": "Technician",
+    "specialist": "Specialist",
+    "analyst": "Analyst",
+    "consultant": "Consultant",
+    "representative": "Representative",
+    "assistant": "Assistant",
+    "associate": "Associate",
+    "manager": "Manager",
+    "superintendent": "Superintendent",
+    "administrator": "Administrator",
+    "lead": "Lead",
 }
 
 
@@ -153,6 +399,116 @@ def extract_country(
         return None
 
 
+_CITY_KEYWORDS = ["city", "town", "locality", "municipality", "village"]
+
+
+def extract_city(html_content: str) -> str | None:
+    try:
+        soup = BeautifulSoup(html_content, "html.parser")
+
+        # 1. Semantic HTML attributes
+        for el in soup.find_all(itemprop="addressLocality"):
+            text = el.get("content") or el.get_text(strip=True)
+            if text and len(text) < 60:
+                return text.strip()
+
+        for cls in ("city", "locality", "town"):
+            for el in soup.find_all(class_=re.compile(cls, re.I)):
+                text = el.get_text(strip=True)
+                if text and len(text) < 60:
+                    return text
+
+        # 2. JSON-LD
+        for script in soup.find_all("script", type="application/ld+json"):
+            try:
+                data = json.loads(script.string)
+                items = data if isinstance(data, list) else [data]
+                for item in items:
+                    if isinstance(item, dict):
+                        loc = item.get("location") or item.get("address") or {}
+                        if isinstance(loc, dict):
+                            city = loc.get("addressLocality")
+                            if isinstance(city, str) and city:
+                                return city
+            except Exception:
+                continue
+
+        # 3. "City: X" keyword patterns (must start with uppercase)
+        text_content = soup.get_text()
+        for kw in _CITY_KEYWORDS:
+            m = re.search(rf"(?i)\b{re.escape(kw)}\s*[:.\-–—]\s*([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+)?)", text_content)
+            if m:
+                candidate = m.group(1).strip()
+                if candidate[0].isupper():
+                    return candidate
+
+        # 4. Address proximity: capitalized word near phone/address keywords
+        lines = [ln.strip() for ln in text_content.split("\n") if ln.strip()]
+        for i, ln in enumerate(lines):
+            if any(kw in ln.lower() for kw in ("phone", "tel:", "address:", "email:")):
+                for j in range(max(0, i - 2), i):
+                    m = re.search(
+                        r"\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)\s*,\s*(?:South Africa|Kenya|Nigeria|Ghana|Egypt|Morocco|Algeria|Namibia|Botswana|Zambia|Zimbabwe|Tanzania|Uganda|Ethiopia|Angola|Mozambique)",
+                        lines[j],
+                    )
+                    if m:
+                        candidate = m.group(1).strip()
+                        if candidate[0].isupper():
+                            return candidate
+
+        return None
+    except Exception:
+        return None
+
+
+_STATE_KEYWORDS = ["state", "province", "region", "county", "district", "territory"]
+
+
+def extract_state(html_content: str) -> str | None:
+    try:
+        soup = BeautifulSoup(html_content, "html.parser")
+
+        # 1. Semantic HTML attributes
+        for el in soup.find_all(itemprop="addressRegion"):
+            text = el.get("content") or el.get_text(strip=True)
+            if text and len(text) < 60:
+                return text.strip()
+
+        for cls in ("state", "province", "region", "county"):
+            for el in soup.find_all(class_=re.compile(cls, re.I)):
+                text = el.get_text(strip=True)
+                if text and len(text) < 60:
+                    return text
+
+        # 2. JSON-LD
+        for script in soup.find_all("script", type="application/ld+json"):
+            try:
+                data = json.loads(script.string)
+                items = data if isinstance(data, list) else [data]
+                for item in items:
+                    if isinstance(item, dict):
+                        loc = item.get("location") or item.get("address") or {}
+                        if isinstance(loc, dict):
+                            region = loc.get("addressRegion")
+                            if isinstance(region, str) and region:
+                                return region
+            except Exception:
+                continue
+
+        # 3. "State: X" keyword patterns (must start with uppercase)
+        text_content = soup.get_text()
+        for kw in _STATE_KEYWORDS:
+            m = re.search(rf"(?i)\b{re.escape(kw)}\s*[:.\-–—]\s*([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+)?)", text_content)
+            if m:
+                candidate = m.group(1).strip()
+                if candidate[0].isupper():
+                    return candidate
+
+        return None
+    except Exception:
+        return None
+
+
 def extract_products(html_content: str, categories: list[str]) -> list[str]:
     try:
         soup = BeautifulSoup(html_content, "html.parser")
@@ -173,20 +529,29 @@ def _is_valid_person_name(name: str) -> bool:
         return False
     if " " not in name:
         return False
+    if "  " in name:
+        return False
     words = name.split()
     if len(words) > 5:
         return False
     if set(words).issubset(_SKIP_WORDS):
         return False
+    if any(w in _SKIP_WORDS for w in words):
+        return False
     if any(c in name for c in ("@", "http", "www.", ".com", ".co.", ".in")):
         return False
     if any(p.search(name) for p in _ROLE_PATTERNS):
+        return False
+    if not _NAME_PATTERN.fullmatch(name):
         return False
     for word in words:
         if word in _COMPANY_INDICATORS:
             return False
         if word in _NON_PERSON_WORDS:
             return False
+    noise_count = sum(1 for w in words if w in _NOISE_WORDS)
+    if noise_count / len(words) >= 0.4:
+        return False
     return True
 
 

@@ -21,7 +21,7 @@ class Config:
 
     max_search_attempts: int = 5
     max_search_pages: int = 10
-    page_load_timeout: int = 25
+    page_load_timeout: int = 15
     screenshots: bool = False
     user_agents: list[str] = field(default_factory=lambda: list(DEFAULT_USER_AGENTS))
 

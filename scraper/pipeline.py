@@ -5,10 +5,20 @@ import random
 import re
 import time
 from typing import TYPE_CHECKING
+from urllib.parse import urlparse
 
+import requests
 from bs4 import BeautifulSoup
 
-from scraper.extractors import extract_contact_person, extract_country, extract_email, extract_phone, extract_products
+from scraper.extractors import (
+    extract_city,
+    extract_contact_person,
+    extract_country,
+    extract_email,
+    extract_phone,
+    extract_products,
+    extract_state,
+)
 from scraper.types import ContactInfo
 
 if TYPE_CHECKING:
@@ -24,18 +34,38 @@ def extract_company_info(driver: Chrome, url: str, name: str, config: Config) ->
         email="Not Found", phone="Not Found", country="Not Found", state="Not Found", city="Not Found"
     )
 
+    if not _is_valid_url(url):
+        logger.info("Skipping invalid URL: %s", url)
+        return None
+
     try:
         logger.info("Visiting: %s", url)
-        driver.get(url)
-        time.sleep(random.uniform(2, 4))
+        html = None
+        try:
+            driver.get(url)
+            time.sleep(random.uniform(1, 2.5))
+            html = driver.page_source
+        except Exception as se:
+            logger.warning("Selenium failed on %s — trying requests fallback: %s", url, se)
+            try:
+                resp = requests.get(url, timeout=10, headers={"User-Agent": "Mozilla/5.0"}, verify=False)
+                if resp.status_code == 200:
+                    html = resp.text
+            except Exception as re:
+                logger.warning("Requests fallback also failed for %s: %s", url, re)
 
-        html = driver.page_source
+        if html is None:
+            logger.error("Failed to fetch %s via both Selenium and requests", url)
+            return None
+
         soup = BeautifulSoup(html, "html.parser")
         text = soup.get_text()
 
         contact.email = extract_email(html) or "Not Found"
         contact.phone = extract_phone(html, config.phone_patterns, config.phone_prefixes) or "Not Found"
         contact.country = extract_country(html, config.countries, config.country_keywords) or "Not Found"
+        contact.city = extract_city(html) or "Not Found"
+        contact.state = extract_state(html) or "Not Found"
 
         person, role = extract_contact_person(html)
         if person != "Not Found":
@@ -81,9 +111,22 @@ def extract_company_info(driver: Chrome, url: str, name: str, config: Config) ->
 
 def _scrape_page(driver: Chrome, page_url: str, config: Config, existing: ContactInfo) -> ContactInfo | None:
     try:
-        driver.get(page_url)
-        time.sleep(random.uniform(1.5, 3))
-        html = driver.page_source
+        html = None
+        try:
+            driver.get(page_url)
+            time.sleep(random.uniform(0.8, 2))
+            html = driver.page_source
+        except Exception as se:
+            logger.warning("Selenium failed on contact page %s — trying requests fallback: %s", page_url, se)
+            try:
+                resp = requests.get(page_url, timeout=10, headers={"User-Agent": "Mozilla/5.0"}, verify=False)
+                if resp.status_code == 200:
+                    html = resp.text
+            except Exception as re:
+                logger.warning("Requests fallback also failed for %s: %s", page_url, re)
+
+        if html is None:
+            return None
 
         contact = ContactInfo(
             email=existing.email,
@@ -110,6 +153,16 @@ def _scrape_page(driver: Chrome, page_url: str, config: Config, existing: Contac
             if country:
                 contact.country = country
 
+        if contact.city == "Not Found":
+            city = extract_city(html)
+            if city:
+                contact.city = city
+
+        if contact.state == "Not Found":
+            state = extract_state(html)
+            if state:
+                contact.state = state
+
         if contact.contact_person == "Not Found":
             person, role = extract_contact_person(html)
             if person != "Not Found":
@@ -121,6 +174,23 @@ def _scrape_page(driver: Chrome, page_url: str, config: Config, existing: Contac
     except Exception:
         logger.exception("Failed to scrape page: %s", page_url)
         return None
+
+
+_SOCIAL_DOMAINS = {"facebook.com", "twitter.com", "x.com", "linkedin.com", "instagram.com"}
+
+
+def _is_valid_url(url: str) -> bool:
+    if not url.startswith(("http://", "https://")):
+        return False
+    try:
+        parsed = urlparse(url)
+        if parsed.hostname:
+            parts = parsed.hostname.split(".")
+            if len(parts) >= 2 and ".".join(parts[-2:]) in _SOCIAL_DOMAINS:
+                return False
+    except Exception:
+        return False
+    return True
 
 
 def _find_page(driver: Chrome, base_url: str, keywords: list[str]) -> str | None:
@@ -137,7 +207,7 @@ def _find_page(driver: Chrome, base_url: str, keywords: list[str]) -> str | None
             elements = driver.find_elements("xpath", pat)
             if elements:
                 href = elements[0].get_attribute("href")
-                if href:
+                if href and _is_valid_url(href):
                     return href
 
         domain_match = re.match(r"(https?://[^/]+)", base_url)
