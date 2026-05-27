@@ -1,5 +1,41 @@
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "supplier-scraper"
+version = "1.0.0"
+description = "Google-based supplier/medical device manufacturer scraper with GUI"
+requires-python = ">=3.10"
+dependencies = [
+    "patchright>=1.60.0",
+    "pandas==3.0.3",
+    "openpyxl==3.1.5",
+    "beautifulsoup4==4.14.3",
+    "gradio==6.15.1",
+]
+
+[project.optional-dependencies]
+dev = [
+    "ruff==0.15.14",
+    "mypy==2.1.0",
+    "jupytext==1.19.3",
+]
+
+[project.urls]
+Homepage = "https://github.com/anomalyco/ORO"
+
+[project.scripts]
+supplier-scraper = "run_scraper:main"
+
+[tool.setuptools]
+py-modules = ["run_scraper"]
+
+[tool.setuptools.packages.find]
+include = ["scraper*", "gui*"]
+
 [tool.ruff]
-target-version = "py310"
+target-version = "py313"
 line-length = 120
 
 [tool.ruff.lint]
@@ -10,6 +46,6 @@ quote-style = "double"
 indent-style = "space"
 
 [tool.mypy]
-python_version = "3.10"
+python_version = "3.13"
 ignore_missing_imports = true
 pretty = true

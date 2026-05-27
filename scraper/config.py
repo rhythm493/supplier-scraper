@@ -3,7 +3,21 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import platform
 from dataclasses import dataclass, field
+
+
+def _get_user_cache_base() -> str:
+    app_name = "supplier-scraper"
+    system = platform.system()
+    if system == "Windows":
+        base = os.environ.get("LOCALAPPDATA", os.path.expanduser("~"))
+        return os.path.join(base, app_name)
+    if system == "Darwin":
+        return os.path.join(os.path.expanduser("~"), "Library", "Caches", app_name)
+    xdg = os.environ.get("XDG_CACHE_HOME", os.path.join(os.path.expanduser("~"), ".cache"))
+    return os.path.join(xdg, app_name)
+
 
 DEFAULT_USER_AGENTS = [
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36",
@@ -48,6 +62,5 @@ class Config:
 
     @property
     def cache_dir(self) -> str:
-        base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         name = os.path.splitext(os.path.basename(self.output_filename))[0]
-        return os.path.join(base, "cache", name)
+        return os.path.join(_get_user_cache_base(), "search-cache", name)

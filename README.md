@@ -8,18 +8,20 @@ Search Google for suppliers/manufacturers, visit their websites, and extract con
 
 2. **Open a terminal** in this folder and install dependencies:
    ```bash
-   pip install -r scraper/requirements.txt
+   pip install -e .
    ```
 
-3. **Launch Jupyter:**
+3. **Launch the GUI:**
    ```bash
-   jupyter notebook Supplier_Scraper.ipynb
+   python run_scraper.py
    ```
+   A browser window will open with the configuration interface.  
+   *Alternatively, run in Jupyter: `jupyter notebook Supplier_Scraper.ipynb`*
 
-4. **Run the cells in order:**
-   - **Cell 0** — Installs any remaining dependencies, downloads Chrome
-   - **Cell 1** — Edit your search settings (queries, countries, products, etc.)
-   - **Cell 2** — Runs the scraper. A progress bar shows live results.
+4. **Configure & Run:**
+   - **Configuration tab** — Set search queries, countries, products to filter, etc.
+   - **Run tab** — Click **Start** to begin scraping. Progress, results, and logs update live.
+   - **Help tab** — Reference for all fields.
 
 5. **Get your output** — the `.xlsx` file appears in the same folder.
 

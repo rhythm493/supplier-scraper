@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import re
 
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup, Tag
 
 from scraper.validators import normalize_country, normalize_email, normalize_phone
 
@@ -38,7 +38,8 @@ _COMPANY_INDICATORS = {
     "Network",
     "Supplier",
     "Suppliers",
-    "Manufacturer", "Manufacturers",
+    "Manufacturer",
+    "Manufacturers",
     "Device",
     "Devices",
     "Instruments",
@@ -50,113 +51,319 @@ _COMPANY_INDICATORS = {
 }
 _NON_PERSON_WORDS = {
     # Existing
-    "User", "Admin", "Super", "Cookie", "Policy", "Select",
-    "Page", "Home", "Returns", "Profile", "Overview",
-    "Uniforms", "Accessories", "Login", "Register", "Sign",
-    "Search", "Menu", "Navigation",
-    "National", "International", "Regional", "Local",
-    "Contact", "About", "Learn", "More", "Mail", "Eg", "Sample",
-    "Loading", "Submit", "Please",
+    "User",
+    "Admin",
+    "Super",
+    "Cookie",
+    "Policy",
+    "Select",
+    "Page",
+    "Home",
+    "Returns",
+    "Profile",
+    "Overview",
+    "Uniforms",
+    "Accessories",
+    "Login",
+    "Register",
+    "Sign",
+    "Search",
+    "Menu",
+    "Navigation",
+    "National",
+    "International",
+    "Regional",
+    "Local",
+    "Contact",
+    "About",
+    "Learn",
+    "More",
+    "Mail",
+    "Eg",
+    "Sample",
+    "Loading",
+    "Submit",
+    "Please",
     # Geography / region — not person names
-    "Africa", "African", "Saharan", "Southern", "Northern",
-    "Eastern", "Western",
-    "Arabia", "Bahrain", "Kuwait", "Saudi", "States", "United",
+    "Africa",
+    "African",
+    "Saharan",
+    "Southern",
+    "Northern",
+    "Eastern",
+    "Western",
+    "Arabia",
+    "Bahrain",
+    "Kuwait",
+    "Saudi",
+    "States",
+    "United",
     # Street / address
-    "Street", "Road", "Lane", "Drive", "Avenue", "Highway",
-    "Way", "Park", "Office", "Village", "Township", "Ave",
-    "Rd", "Coast", "Floor", "Ground", "Old", "Glen",
-    "Postal", "Address", "Blvd",
+    "Street",
+    "Road",
+    "Lane",
+    "Drive",
+    "Avenue",
+    "Highway",
+    "Way",
+    "Park",
+    "Office",
+    "Village",
+    "Township",
+    "Ave",
+    "Rd",
+    "Coast",
+    "Floor",
+    "Ground",
+    "Old",
+    "Glen",
+    "Postal",
+    "Address",
+    "Blvd",
     # Business / org
-    "Institute", "Platform", "Portal", "Hub", "Centre", "Center",
-    "Tel", "Data", "Management",
-    "Training", "News", "Certificates",
-    "Distributor", "Distributors", "Wholesaler", "Wholesalers",
-    "Preventative", "Maintenance", "Program", "Programme", "Programmes",
-    "Additional", "Information",
-    "Industry", "Supply", "Department", "Authority",
-    "Regulatory", "Policies", "Terms", "Use",
-    "Site", "Request", "Forgery",
+    "Institute",
+    "Platform",
+    "Portal",
+    "Hub",
+    "Centre",
+    "Center",
+    "Tel",
+    "Data",
+    "Management",
+    "Training",
+    "News",
+    "Certificates",
+    "Distributor",
+    "Distributors",
+    "Wholesaler",
+    "Wholesalers",
+    "Preventative",
+    "Maintenance",
+    "Program",
+    "Programme",
+    "Programmes",
+    "Additional",
+    "Information",
+    "Industry",
+    "Supply",
+    "Department",
+    "Authority",
+    "Regulatory",
+    "Policies",
+    "Terms",
+    "Use",
+    "Site",
+    "Request",
+    "Forgery",
     "Seminars",
     # Products — not persons
-    "Products", "Reels", "Reel", "Gown", "Gowns", "Pouch", "Pouches",
-    "Bag", "Bags", "Wrap", "Wraps",
-    "Portfolio", "Sterilization",
-    "Wrapping", "Machine", "Over",
-    "Animal", "Feed",
-    "Better", "Care",
-    "Cape", "Town",
-    "Central", "Sterile",
+    "Products",
+    "Reels",
+    "Reel",
+    "Gown",
+    "Gowns",
+    "Pouch",
+    "Pouches",
+    "Bag",
+    "Bags",
+    "Wrap",
+    "Wraps",
+    "Portfolio",
+    "Sterilization",
+    "Wrapping",
+    "Machine",
+    "Over",
+    "Animal",
+    "Feed",
+    "Better",
+    "Care",
+    "Cape",
+    "Town",
+    "Central",
+    "Sterile",
     "Hellenic",
     # Commerce / UI labels
-    "All", "Compare",
-    "Feel", "Free", "Help",
-    "Mobile", "No", "Need", "Name", "Full",
-    "Near", "Support",
-    "Instant", "Quote", "Shop", "Doe",
-    "Message", "Related", "Substances", "Act",
-    "Good", "Double", "Deluxe", "Practice",
+    "All",
+    "Compare",
+    "Feel",
+    "Free",
+    "Help",
+    "Mobile",
+    "No",
+    "Need",
+    "Name",
+    "Full",
+    "Near",
+    "Support",
+    "Instant",
+    "Quote",
+    "Shop",
+    "Doe",
+    "Message",
+    "Related",
+    "Substances",
+    "Act",
+    "Good",
+    "Double",
+    "Deluxe",
+    "Practice",
     "Beauty",
-    "Launch", "Sale",
-    "Get", "Started", "Speak", "Self", "Sealable", "Dick",
-    "Appliance", "Parts", "Arclight", "Diagnostics",
-    "Developed", "Kids", "Toys",
-    "Holy", "Grail", "Major", "General", "El",
+    "Launch",
+    "Sale",
+    "Get",
+    "Started",
+    "Speak",
+    "Self",
+    "Sealable",
+    "Dick",
+    "Appliance",
+    "Parts",
+    "Arclight",
+    "Diagnostics",
+    "Developed",
+    "Kids",
+    "Toys",
+    "Holy",
+    "Grail",
+    "Major",
+    "General",
+    "El",
     # Medical / infection control
-    "Acquired", "Autoclave", "Autoclaves", "Consumables",
-    "Control", "Hospital", "Infection", "Infections",
-    "Laundry", "Market",
-    "Soap", "Bar", "Packing", "Sterilizer", "Steam",
+    "Acquired",
+    "Autoclave",
+    "Autoclaves",
+    "Consumables",
+    "Control",
+    "Hospital",
+    "Infection",
+    "Infections",
+    "Laundry",
+    "Market",
+    "Soap",
+    "Bar",
+    "Packing",
+    "Sterilizer",
+    "Steam",
     "Instrument",
-    "Mill", "Roller", "Rollers", "Stamping", "Table", "Top", "Triple", "Beaded",
-    "Electronics", "Solar", "Charging", "Vertical",
-    "Semi", "Automatic", "Operating", "Pan", "Track",
-    "Ethylene", "Oxide", "Indicator", "Indicators", "Tapes",
-    "Aluminium", "Casting",
-    "Air", "Ring", "Aluminum", "Heat",
-    "Ultrasonic", "Cleaner", "Washer", "Disinfector",
-    "Layer", "Film", "Extrusion", "Line",
-    "Pass", "Box", "Rack",
+    "Mill",
+    "Roller",
+    "Rollers",
+    "Stamping",
+    "Table",
+    "Top",
+    "Triple",
+    "Beaded",
+    "Electronics",
+    "Solar",
+    "Charging",
+    "Vertical",
+    "Semi",
+    "Automatic",
+    "Operating",
+    "Pan",
+    "Track",
+    "Ethylene",
+    "Oxide",
+    "Indicator",
+    "Indicators",
+    "Tapes",
+    "Aluminium",
+    "Casting",
+    "Air",
+    "Ring",
+    "Aluminum",
+    "Heat",
+    "Ultrasonic",
+    "Cleaner",
+    "Washer",
+    "Disinfector",
+    "Layer",
+    "Film",
+    "Extrusion",
+    "Line",
+    "Pass",
+    "Box",
+    "Rack",
     # Company / business terms
-    "Averda", "Based", "Black", "Economic", "Empowerment",
-    "Cardiology", "Working", "Groups",
+    "Averda",
+    "Based",
+    "Black",
+    "Economic",
+    "Empowerment",
+    "Cardiology",
+    "Working",
+    "Groups",
     "Largest",
-    "Flat", "Rolls",
+    "Flat",
+    "Rolls",
     "Pre",
     "Growthpoint",
-    "Commercial", "Vehicles", "House",
+    "Commercial",
+    "Vehicles",
+    "House",
     # Tech
-    "Sitecore", "Engagement", "Analytics",
+    "Sitecore",
+    "Engagement",
+    "Analytics",
     # Product / equipment names
-    "Printed", "Wrapper",
-    "Seal", "Cover",
-    "Sports", "Boating",
-    "Trolley", "Scrub", "Station",
+    "Printed",
+    "Wrapper",
+    "Seal",
+    "Cover",
+    "Sports",
+    "Boating",
+    "Trolley",
+    "Scrub",
+    "Station",
     "Stainless",
-    "Inch", "Plane",
-    "Medical", "Waste", "Shredder", "Integrated",
-    "Medicine", "Books",
+    "Inch",
+    "Plane",
+    "Medical",
+    "Waste",
+    "Shredder",
+    "Integrated",
+    "Medicine",
+    "Books",
     "Master",
-    "Boutique", "Automotive", "Car",
-    "Doctor", "Blade",
-    "High", "Spin",
-    "Leading", "Organisations",
-    "Gown", "Gowns",
-    "Surgeon", "Surgical",
+    "Boutique",
+    "Automotive",
+    "Car",
+    "Doctor",
+    "Blade",
+    "High",
+    "Spin",
+    "Leading",
+    "Organisations",
+    "Gown",
+    "Gowns",
+    "Surgeon",
+    "Surgical",
     "Disposable",
     "Protective",
     "Packaging",
-    "Garden", "Dining",
-    "Non", "Woven", "Mask", "Making",
-    "Soft", "Mount",
-    "Littmann", "Classic",
-    "Kg", "Price",
-    "Mechanical", "Shaft",
-    "Secure", "Payments",
-    "Approval", "Certificate",
+    "Garden",
+    "Dining",
+    "Non",
+    "Woven",
+    "Mask",
+    "Making",
+    "Soft",
+    "Mount",
+    "Littmann",
+    "Classic",
+    "Kg",
+    "Price",
+    "Mechanical",
+    "Shaft",
+    "Secure",
+    "Payments",
+    "Approval",
+    "Certificate",
     "Safety",
     "Service",
     # UI / common words
-    "You", "Are",
+    "You",
+    "Are",
 }
 _NOISE_WORDS = {
     "And",
@@ -522,6 +729,196 @@ def extract_products(html_content: str, categories: list[str]) -> list[str]:
         return found
     except Exception:
         return []
+
+
+_LOGO_BAD_ALTS = {
+    "logo",
+    "company logo",
+    "site logo",
+    "brand",
+    "home",
+    "",
+    "copyright",
+    "picture",
+    "photo",
+    "image",
+    "banner",
+    "header",
+    "footer",
+    "icon",
+    "avatar",
+    "profile",
+    "thumbnail",
+    "logo mark",
+    "brand logo",
+    "buyer icon",
+    "search icon",
+    "menu",
+    "user",
+    "cart",
+    "shopping cart",
+    "logo image",
+    "main logo",
+    "site logo image",
+}
+
+_TEMPLATE_RE = re.compile(r"\{\{.*?\}\}|{%.*?%}")
+
+_DOMAIN_RE = re.compile(r"(?:(?:https?:)?//)?(?:www\.)?[a-z0-9.-]+\.[a-z]{2,}")
+
+
+def _clean_company_name(name: str) -> str | None:
+    if not name or not name.strip():
+        return None
+    name = name.strip()
+    if len(name) < 3 or len(name) > 100:
+        return None
+    if _TEMPLATE_RE.search(name):
+        return None
+    if "@" in name:
+        return None
+    words = name.split()
+    if len(words) > 10:
+        return None
+    lowered = name.lower()
+    if lowered in _LOGO_BAD_ALTS:
+        return None
+    if _DOMAIN_RE.fullmatch(name.strip(".")):
+        return None
+    if "_" in name and " " not in name:
+        return None
+    return name
+
+
+def extract_company_name(html_content: str, url: str, fallback_name: str = "") -> str:
+    from urllib.parse import urlparse
+
+    try:
+        soup = BeautifulSoup(html_content, "html.parser")
+
+        # 1. Open Graph site_name
+        og_tag = soup.find("meta", property="og:site_name") or soup.find("meta", attrs={"name": "og:site_name"})
+        if isinstance(og_tag, Tag) and og_tag.has_attr("content"):
+            content = og_tag["content"]
+            if isinstance(content, str):
+                cleaned = _clean_company_name(content)
+                if cleaned:
+                    return cleaned
+
+        # 2. application-name meta
+        app_tag = soup.find("meta", attrs={"name": "application-name"})
+        if isinstance(app_tag, Tag) and app_tag.has_attr("content"):
+            content = app_tag["content"]
+            if isinstance(content, str):
+                cleaned = _clean_company_name(content)
+                if cleaned:
+                    return cleaned
+
+        # 3. Logo image alt text
+        logo_selectors = [
+            "header a[href='/'] img[alt]",
+            "a.navbar-brand img[alt]",
+            "a.logo img[alt]",
+            "img[class*='logo']",
+            "header img[alt]",
+        ]
+        for sel in logo_selectors:
+            el = soup.select_one(sel)
+            if isinstance(el, Tag) and el.has_attr("alt"):
+                alt = el["alt"]
+                if isinstance(alt, str):
+                    cleaned = _clean_company_name(alt)
+                    if cleaned:
+                        return cleaned
+
+        # 4. Copyright footer
+        footer = soup.find("footer")
+        if isinstance(footer, Tag):
+            footer_text = footer.get_text()
+            m = re.search(
+                r"(?:©|copyright)\s*(?:\d{4}\s*)?"
+                r"([A-Z][A-Za-z0-9][A-Za-z0-9\s&.,'-]+?)"
+                r"(?:\s*[,.]?\s*(?:All\s+[Rr]ights|Inc|Ltd|Pty|™|®|\d{4}))",
+                footer_text,
+            )
+            if m:
+                name = m.group(1).strip().rstrip(".,")
+                cleaned = _clean_company_name(name)
+                if cleaned:
+                    return cleaned
+
+        # 5. Domain-derived name (compute once, use as fallback too)
+        parsed = urlparse(url)
+        domain = parsed.netloc or parsed.path or ""
+        domain = domain.lower().replace("www.", "")
+        parts = [p for p in domain.split(".") if p]
+        skip = {
+            "com",
+            "co",
+            "org",
+            "net",
+            "gov",
+            "edu",
+            "uk",
+            "za",
+            "in",
+            "au",
+            "ca",
+            "de",
+            "fr",
+            "es",
+            "it",
+            "nl",
+            "br",
+            "jp",
+            "cn",
+            "kr",
+            "ng",
+            "ke",
+            "eg",
+            "ma",
+            "tn",
+            "gh",
+            "tz",
+            "ug",
+            "zm",
+            "zw",
+            "mw",
+            "na",
+            "bw",
+            "mz",
+            "ao",
+            "sz",
+            "ls",
+            "mg",
+        }
+        domain_name = ""
+        name_part = ""
+        for p in reversed(parts):
+            if p not in skip and len(p) >= 3:
+                name_part = p
+                break
+        if not name_part and parts:
+            name_part = parts[0] if len(parts[0]) >= 3 else ""
+        if name_part:
+            words = re.findall(r"[a-z]+|[A-Z][a-z]*|\d+", name_part)
+            result = " ".join(w.capitalize() for w in words if w) if len(words) > 1 else name_part.capitalize()
+            domain_name = result
+            cleaned = _clean_company_name(domain_name)
+            if cleaned:
+                return cleaned
+
+        # 6. Fallback: original Google title, cleaned
+        cleaned = _clean_company_name(fallback_name)
+        if cleaned:
+            return cleaned
+
+        # 7. Absolute last resort: domain-derived (even if cleaner rejected it)
+        if domain_name:
+            return domain_name
+        return "Not Found"
+    except Exception:
+        return "Not Found"
 
 
 def _is_valid_person_name(name: str) -> bool:
