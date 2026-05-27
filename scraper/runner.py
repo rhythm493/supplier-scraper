@@ -19,8 +19,6 @@ from scraper.search import google_search, load_search_cache, save_search_cache
 from scraper.types import SearchResult
 
 if TYPE_CHECKING:
-    from patchright.sync_api import Browser
-
     from scraper.config import Config
 
 logger = logging.getLogger(__name__)
@@ -137,15 +135,17 @@ def _process_chunk(
     company_items: list[tuple[str, SearchResult]],
     config: Config,
     worker_id: int,
-    browser: Browser,
 ) -> list[dict[str, str]]:
-    context = browser.new_context()
-    page = context.new_page()
-    page.set_default_timeout(config.page_load_timeout * 1000)
-    page.route("**/*.{png,jpg,jpeg,gif,svg,ico,webp,woff,woff2,ttf,eot}", lambda route: route.abort())
+    pw = sync_playwright().start()
+    browser = pw.chromium.launch(channel="chrome", headless=False)
     chunk_results: list[dict[str, str]] = []
 
     try:
+        context = browser.new_context()
+        page = context.new_page()
+        page.set_default_timeout(config.page_load_timeout * 1000)
+        page.route("**/*.{png,jpg,jpeg,gif,svg,ico,webp,woff,woff2,ttf,eot}", lambda route: route.abort())
+
         for company_name, search_result in company_items:
             if not _is_valid_url(search_result.url):
                 logger.info("Skipping invalid URL: %s", search_result.url)
@@ -171,9 +171,17 @@ def _process_chunk(
                     )
             except Exception:
                 logger.exception("Worker %d failed on: %s", worker_id, company_name)
-    finally:
         try:
             context.close()
+        except Exception:
+            pass
+    finally:
+        try:
+            browser.close()
+        except Exception:
+            pass
+        try:
+            pw.stop()
         except Exception:
             pass
 
@@ -269,48 +277,36 @@ def run_scraper(
         for i, item in enumerate(items):
             chunks[i % num_workers].append(item)
 
-        pw = sync_playwright().start()
-        browser = pw.chromium.launch(channel="chrome", headless=False)
-        try:
-            with concurrent.futures.ThreadPoolExecutor(max_workers=num_workers) as executor:
-                futures = {
-                    executor.submit(_process_chunk, chunk, config, wid, browser): wid
-                    for wid, chunk in enumerate(chunks) if chunk
-                }
-                completed_chunks = 0
-                for future in concurrent.futures.as_completed(futures):
-                    if cancel_event is not None and cancel_event.is_set():
-                        logger.info("Cancellation requested — shutting down workers")
-                        executor.shutdown(wait=False, cancel_futures=True)
-                        break
+        with concurrent.futures.ThreadPoolExecutor(max_workers=num_workers) as executor:
+            futures = {
+                executor.submit(_process_chunk, chunk, config, wid): wid
+                for wid, chunk in enumerate(chunks) if chunk
+            }
+            completed_chunks = 0
+            for future in concurrent.futures.as_completed(futures):
+                if cancel_event is not None and cancel_event.is_set():
+                    logger.info("Cancellation requested — shutting down workers")
+                    executor.shutdown(wait=False, cancel_futures=True)
+                    break
 
-                    try:
-                        chunk_rows = future.result()
-                        all_rows.extend(chunk_rows)
-                    except KeyboardInterrupt:
-                        raise
-                    except Exception:
-                        logger.exception("Worker chunk failed")
+                try:
+                    chunk_rows = future.result()
+                    all_rows.extend(chunk_rows)
+                except KeyboardInterrupt:
+                    raise
+                except Exception:
+                    logger.exception("Worker chunk failed")
 
-                    completed_chunks += 1
-                    if on_progress:
-                        temp_df = pd.DataFrame(all_rows, columns=COLUMNS)
-                        on_progress(
-                            temp_df,
-                            len(all_rows),
-                            num_items,
-                            True,
-                            f"chunk {completed_chunks}/{len(futures)}",
-                        )
-        finally:
-            try:
-                browser.close()
-            except Exception:
-                pass
-            try:
-                pw.stop()
-            except Exception:
-                pass
+                completed_chunks += 1
+                if on_progress:
+                    temp_df = pd.DataFrame(all_rows, columns=COLUMNS)
+                    on_progress(
+                        temp_df,
+                        len(all_rows),
+                        num_items,
+                        True,
+                        f"chunk {completed_chunks}/{len(futures)}",
+                    )
 
         _check_cancelled(cancel_event)
         df = pd.DataFrame(all_rows, columns=COLUMNS)
