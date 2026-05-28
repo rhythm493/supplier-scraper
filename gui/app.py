@@ -28,7 +28,6 @@ from gui.utils import (
 )
 
 _APP_CSS = """
-<style>
 .log-box {
     background: #1e1e1e;
     color: #d4d4d4;
@@ -37,7 +36,7 @@ _APP_CSS = """
     line-height: 1.4;
     padding: 8px 12px;
     border-radius: 6px;
-    height: 260px;
+    height: 100px;
     overflow-y: auto;
     white-space: pre-wrap;
     word-break: break-all;
@@ -48,10 +47,7 @@ _APP_CSS = """
 .log-box::-webkit-scrollbar { width: 8px; }
 .log-box::-webkit-scrollbar-track { background: #2a2a2a; }
 .log-box::-webkit-scrollbar-thumb { background: #555; border-radius: 4px; }
-.gr-box { border-radius: 8px !important; }
-.gr-button { font-weight: 600 !important; }
 footer { display: none !important; }
-</style>
 """
 
 
@@ -136,7 +132,7 @@ def _run_scrape(
         status = scrape_state.get("phase", "Running...")
         captcha = scrape_state.get("captcha", False)
         log_lines = scrape_state.get("log", [])
-        log_text = "\n".join(log_lines[-40:])
+        log_text = "\n".join(log_lines[-5:])
         df = scrape_state.get("df")
         if df is None or df.empty:
             df = pd.DataFrame(columns=COLUMNS)
@@ -163,21 +159,49 @@ def _run_scrape(
             prev_df_h = current_h
             updated["df"] = df
 
-        download_upd = gr.update(visible=False)
-        updated["download"] = download_upd
+        output_file_upd = gr.update(visible=False)
+        updated["output_file"] = output_file_upd
 
         yield (
             updated["status"],
             updated["captcha"],
             updated.get("log", gr.skip()),
             updated.get("df", gr.skip()),
-            updated["download"],
+            updated["output_file"],
         )
 
     if scrape_state.get("error"):
         error_msg = scrape_state["error"]
         log_lines = scrape_state.get("log", [])
-        log_text = "\n".join(log_lines[-40:])
+        log_text = "\n".join(log_lines[-5:])
+        escaped = log_text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+        df = scrape_state.get("df")
+        if df is None or df.empty:
+            df = pd.DataFrame(columns=COLUMNS)
+        yield (
+            f"❌ **Error:** {error_msg}",
+            gr.update(visible=False),
+            f'<div class="log-box">{escaped}</div>',
+            df,
+            gr.update(visible=False),
+        )
+    else:
+        df = scrape_state.get("df", pd.DataFrame(columns=COLUMNS))
+        output_path = scrape_state.get("output_path")
+        log_text = "\n".join(scrape_state.get("log", [])[-5:])
+        escaped = log_text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+        yield (
+            f"✅ **Complete!** Found {len(df)} companies.",
+            gr.update(visible=False),
+            f'<div class="log-box">{escaped}</div>',
+            df,
+            gr.update(visible=output_path is not None, value=output_path) if output_path else gr.update(visible=False),
+        )
+
+    if scrape_state.get("error"):
+        error_msg = scrape_state["error"]
+        log_lines = scrape_state.get("log", [])
+        log_text = "\n".join(log_lines[-5:])
         escaped = log_text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
         df = scrape_state.get("df")
         if df is None or df.empty:
@@ -289,8 +313,8 @@ def create_ui() -> gr.Blocks:
     with gr.Blocks(
         title="Supplier Scraper",
         fill_height=True,
+        css=_APP_CSS,
     ) as app:
-        gr.HTML(_APP_CSS, visible=False)
         gr.Markdown("# 🏭 Supplier Scraper")
         gr.Markdown("Extract supplier and manufacturer data from Google Search results.")
 
@@ -403,9 +427,8 @@ def create_ui() -> gr.Blocks:
                     start_btn = gr.Button("▶ Start Scraping", variant="primary", scale=2)
                     cancel_btn = gr.Button("■ Cancel", variant="stop", scale=1)
 
-                download_btn = gr.DownloadButton(
+                output_file = gr.File(
                     label="📥 Download Excel",
-                    variant="primary",
                     visible=False,
                 )
 
@@ -461,7 +484,7 @@ def create_ui() -> gr.Blocks:
             screenshots,
             global_state,
         ]
-        outputs = [status_md, captcha_md, log_html, results_df, download_btn]
+        outputs = [status_md, captcha_md, log_html, results_df, output_file]
 
         event = start_btn.click(
             fn=_run_scrape,
