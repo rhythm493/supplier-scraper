@@ -17,21 +17,23 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install -e .
+          pip install -e ".[dev]"
           pip install pyinstaller
+
+      - name: Install patchright browser (Chrome for Testing)
+        run: python -m patchright install chrome
 
       - name: Build with PyInstaller
         run: pyinstaller build/scraper.spec --clean --noconfirm
 
-      - name: Create compressed archive
+      - name: Rename binary with version tag
         run: |
-          cd dist
-          tar czf SupplierScraper-linux-${{ github.ref_name }}.tar.gz SupplierScraper/
+          cp dist/SupplierScraper/SupplierScraper dist/SupplierScraper-${{ github.ref_name }}-linux
 
-      - name: Upload to release
+      - name: Upload binary to release
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/SupplierScraper-linux-${{ github.ref_name }}.tar.gz
+          files: dist/SupplierScraper-${{ github.ref_name }}-linux
 
   build-windows:
     runs-on: windows-latest
@@ -45,18 +47,20 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install -e .
+          pip install -e ".[dev]"
           pip install pyinstaller
+
+      - name: Install patchright browser (Chrome for Testing)
+        run: python -m patchright install chrome
 
       - name: Build with PyInstaller
         run: pyinstaller build/scraper.spec --clean --noconfirm
 
-      - name: Create compressed archive
+      - name: Rename binary with version tag
         run: |
-          cd dist
-          Compress-Archive -Path SupplierScraper\* -DestinationPath SupplierScraper-windows-${{ github.ref_name }}.zip
+          copy dist\SupplierScraper\SupplierScraper.exe dist\SupplierScraper-${{ github.ref_name }}-windows.exe
 
-      - name: Upload to release
+      - name: Upload binary to release
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/SupplierScraper-windows-${{ github.ref_name }}.zip
+          files: dist/SupplierScraper-${{ github.ref_name }}-windows.exe

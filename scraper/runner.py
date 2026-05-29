@@ -279,8 +279,7 @@ def run_scraper(
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=num_workers) as executor:
             futures = {
-                executor.submit(_process_chunk, chunk, config, wid): wid
-                for wid, chunk in enumerate(chunks) if chunk
+                executor.submit(_process_chunk, chunk, config, wid): wid for wid, chunk in enumerate(chunks) if chunk
             }
             completed_chunks = 0
             for future in concurrent.futures.as_completed(futures):

@@ -1,4 +1,0 @@
--r scraper/requirements.txt
-ruff
-mypy
-jupytext

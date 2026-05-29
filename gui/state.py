@@ -189,20 +189,17 @@ DEFAULT_ECOMMERCE_INDICATORS = [
     "ecommerce",
 ]
 
-State = dict[str, Any]
+scrape_state: dict[str, Any] = {
+    "captcha": False,
+    "df": pd.DataFrame(columns=COLUMNS),
+    "log": [],
+    "phase": "Ready",
+    "done": False,
+    "error": None,
+    "output_path": None,
+}
 
-
-def make_initial_state() -> State:
-    return {
-        "captcha": False,
-        "df": pd.DataFrame(columns=COLUMNS),
-        "log": [],
-        "phase": "",
-        "done": False,
-        "error": None,
-        "output_path": None,
-        "cancel_event": None,
-    }
+cancel_event: threading.Event | None = None
 
 
 def build_config(
@@ -239,35 +236,39 @@ def build_config(
     )
 
 
-def patch_captcha_handler(state: State) -> None:
+def patch_captcha_handler() -> None:
     original = search_module.wait_for_captcha
 
     def patched(page, label="", on_captcha=None):
         if not search_module.detect_captcha(page):
             return
-        state["captcha"] = True
-        state["log"].append(f"⚠ CAPTCHA detected ({label}) — solve in the browser window")
+        scrape_state["captcha"] = True
+        scrape_state["log"].append(f"CAPTCHA detected ({label}) — solve in the browser window")
         original(page, label)
-        state["captcha"] = False
-        state["log"].append("✓ CAPTCHA solved, resuming")
+        scrape_state["captcha"] = False
+        scrape_state["log"].append("CAPTCHA solved, resuming")
 
     search_module.wait_for_captcha = patched
     search_module._wait_for_captcha = patched
 
 
-def scraper_worker(
-    config: Config,
-    state: State,
-    cancel_event: threading.Event,
-) -> None:
+def start_scrape(config: Config) -> None:
+    global cancel_event
+    cancel_event = threading.Event()
+    scrape_state["cancel_event"] = cancel_event
+    t = threading.Thread(target=scraper_worker, args=(config,), daemon=True)
+    t.start()
+
+
+def scraper_worker(config: Config) -> None:
     root = logging.getLogger()
 
     class StateHandler(logging.Handler):
         def emit(self, record):
             msg = self.format(record)
-            if len(state["log"]) > 500:
-                state["log"] = state["log"][-250:]
-            state["log"].append(msg)
+            if len(scrape_state["log"]) > 500:
+                scrape_state["log"] = scrape_state["log"][-250:]
+            scrape_state["log"].append(msg)
 
     handler = StateHandler()
     handler.setLevel(logging.INFO)
@@ -277,29 +278,31 @@ def scraper_worker(
     try:
 
         def on_progress(df, completed, total, found, name):
-            state["df"] = df
-            state["phase"] = f"Phase 2: {name} ({completed}/{total})"
-            state["completed"] = completed
-            state["total"] = total
+            scrape_state["df"] = df
+            scrape_state["phase"] = f"Phase 2: {name} ({completed}/{total})"
 
-        state["phase"] = "Phase 1: Searching Google..."
-        state["log"].append("Scraper started")
+        scrape_state["phase"] = "Phase 1: Searching Google..."
+        scrape_state["log"].append("Scraper started")
         df = run_scraper(config, on_progress=on_progress, cancel_event=cancel_event)
 
-        state["df"] = df
-        state["done"] = True
-        state["phase"] = f"Complete — {len(df)} companies"
+        scrape_state["df"] = df
+        scrape_state["done"] = True
         output_path = os.path.abspath(config.output_filename)
-        state["output_path"] = output_path
-        state["log"].append(f"✓ Done! {len(df)} companies → {config.output_filename}")
+        scrape_state["output_path"] = output_path
+        scrape_state["log"].append(f"Done! {len(df)} companies -> {config.output_filename}")
+
+        if cancel_event is not None and cancel_event.is_set():
+            scrape_state["phase"] = f"Cancelled — {len(df)} companies collected"
+        else:
+            scrape_state["phase"] = f"Complete — {len(df)} companies"
 
     except Exception as e:
         if cancel_event is not None and cancel_event.is_set():
-            state["log"].append("✕ Cancelled by user")
-            state["phase"] = "Cancelled"
+            scrape_state["log"].append("Cancelled by user")
+            scrape_state["phase"] = "Cancelled"
         else:
-            state["error"] = str(e)
-            state["log"].append(f"✕ Error: {e}")
-            state["phase"] = f"Error: {e}"
+            scrape_state["error"] = str(e)
+            scrape_state["log"].append(f"Error: {e}")
+            scrape_state["phase"] = f"Error: {e}"
     finally:
         root.removeHandler(handler)

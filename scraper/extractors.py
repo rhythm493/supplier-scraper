@@ -617,7 +617,7 @@ def extract_city(html_content: str) -> str | None:
         for el in soup.find_all(itemprop="addressLocality"):
             text = el.get("content") or el.get_text(strip=True)
             if text and len(text) < 60:
-                return text.strip()
+                return str(text).strip()
 
         for cls in ("city", "locality", "town"):
             for el in soup.find_all(class_=re.compile(cls, re.I)):
@@ -628,7 +628,8 @@ def extract_city(html_content: str) -> str | None:
         # 2. JSON-LD
         for script in soup.find_all("script", type="application/ld+json"):
             try:
-                data = json.loads(script.string)
+                script_text = script.string
+                data = json.loads(str(script_text or ""))
                 items = data if isinstance(data, list) else [data]
                 for item in items:
                     if isinstance(item, dict):
@@ -679,7 +680,7 @@ def extract_state(html_content: str) -> str | None:
         for el in soup.find_all(itemprop="addressRegion"):
             text = el.get("content") or el.get_text(strip=True)
             if text and len(text) < 60:
-                return text.strip()
+                return str(text).strip()
 
         for cls in ("state", "province", "region", "county"):
             for el in soup.find_all(class_=re.compile(cls, re.I)):
@@ -690,7 +691,8 @@ def extract_state(html_content: str) -> str | None:
         # 2. JSON-LD
         for script in soup.find_all("script", type="application/ld+json"):
             try:
-                data = json.loads(script.string)
+                script_text = script.string
+                data = json.loads(str(script_text or ""))
                 items = data if isinstance(data, list) else [data]
                 for item in items:
                     if isinstance(item, dict):
@@ -955,7 +957,8 @@ def _is_valid_person_name(name: str) -> bool:
 def _extract_schema_person(soup: BeautifulSoup) -> tuple[str, str] | None:
     for script in soup.find_all("script", type="application/ld+json"):
         try:
-            data = json.loads(script.string)
+            text = script.string
+            data = json.loads(str(text or ""))
             items = data if isinstance(data, list) else [data]
             for item in items:
                 if isinstance(item, dict) and item.get("@type") in ("Person", "Organization"):

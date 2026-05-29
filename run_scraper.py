@@ -1,58 +1,62 @@
 #!/usr/bin/env python3
-"""CLI entry point for the Supplier Scraper GUI application.
-
-Usage:
-    python run_scraper.py            # Launch the Gradio web UI
-    python run_scraper.py --share    # Launch with public share link
-    python run_scraper.py --port 8080
-"""
+"""CLI entry point for the Supplier Scraper GUI application."""
 
 from __future__ import annotations
 
 import argparse
 import logging
+import multiprocessing
 import sys
 
 
 def main() -> int:
+    multiprocessing.freeze_support()
+
     parser = argparse.ArgumentParser(description="Supplier Scraper GUI")
     parser.add_argument(
-        "--share",
+        "--native",
         action="store_true",
-        help="Create a public share link via Gradio",
+        help="Launch in native desktop window (requires pywebview + GTK/Qt)",
     )
     parser.add_argument(
         "--port",
         type=int,
-        default=None,
-        help="Port to run the server on",
+        default=8080,
+        help="Port to run the server on (default: 8080)",
     )
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 
-    from gradio.themes import Soft as SoftTheme
+    import gui.main  # noqa: F401
 
-    from gui.app import create_ui
-
-    ui = create_ui()
-
+    logging.getLogger().info("Starting Supplier Scraper GUI...")
     print("=" * 50)
     print("  Supplier Scraper GUI")
-    print("  Open the URL below in your browser to access the application")
     print("=" * 50)
 
-    launch_kwargs: dict = {
-        "show_error": True,
-        "theme": SoftTheme(),
-        "inbrowser": True,
-    }
-    if args.share:
-        launch_kwargs["share"] = True
-    if args.port is not None:
-        launch_kwargs["server_port"] = args.port
+    from nicegui import ui
 
-    ui.launch(**launch_kwargs)  # type: ignore[arg-type]
+    kwargs: dict = {
+        "title": "Supplier Scraper",
+        "host": "127.0.0.1",
+        "port": args.port,
+        "dark": False,
+        "reload": False,
+        "show": True,
+    }
+
+    if args.native:
+        try:
+            import webview  # noqa: F401
+
+            kwargs["native"] = True
+            kwargs["show"] = False
+        except ImportError:
+            logging.getLogger().warning("--native requires pywebview. Install: pip install pywebview")
+            kwargs["show"] = True
+
+    ui.run(**kwargs)
     return 0
 
 
