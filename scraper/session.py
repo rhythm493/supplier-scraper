@@ -6,10 +6,10 @@ import shutil
 import tempfile
 from typing import TYPE_CHECKING
 
-from scraper.browser import setup_driver
+from scraper.browser import setup_page
 
 if TYPE_CHECKING:
-    from selenium.webdriver import Chrome
+    from patchright.sync_api import Browser, Page, Playwright
 
     from scraper.config import Config
 
@@ -20,7 +20,9 @@ class ScrapeSession:
     def __init__(self, config: Config) -> None:
         self.config = config
         self.temp_dir: str | None = None
-        self.driver: Chrome | None = None
+        self._pw: Playwright | None = None
+        self._browser: Browser | None = None
+        self.page: Page | None = None
 
     def __enter__(self) -> ScrapeSession:
         self.temp_dir = tempfile.mkdtemp(prefix="scraper_")
@@ -34,20 +36,24 @@ class ScrapeSession:
         file_handler.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s"))
         logging.getLogger().addHandler(file_handler)
 
-        self.driver = setup_driver(
-            use_undetected=True,
+        self._pw, self._browser, self.page = setup_page(
             page_load_timeout=self.config.page_load_timeout,
         )
 
         return self
 
     def __exit__(self, *args: object) -> None:
-        if self.driver:
+        if self._browser:
             try:
-                self.driver.quit()
-                logger.info("WebDriver closed")
+                self._browser.close()
+                logger.info("Browser closed")
             except Exception:
-                logger.exception("Error closing WebDriver")
+                logger.exception("Error closing browser")
+        if self._pw:
+            try:
+                self._pw.stop()
+            except Exception:
+                pass
 
         if self.temp_dir and os.path.exists(self.temp_dir):
             try:

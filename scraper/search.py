@@ -7,22 +7,21 @@ import random
 import re
 import time
 import urllib.parse
+from collections.abc import Callable
 from typing import TYPE_CHECKING
 
 from bs4 import BeautifulSoup
-from selenium.webdriver.common.by import By
-from selenium.webdriver.common.keys import Keys
 
 from scraper.types import SearchResult
 
 if TYPE_CHECKING:
-    from selenium.webdriver import Chrome
+    from patchright.sync_api import Page
 
     from scraper.config import Config
 
 logger = logging.getLogger(__name__)
 
-_CAPTCHA_TIMEOUT = 300  # seconds to wait for user to solve captcha
+_CAPTCHA_TIMEOUT = 300
 
 _CAPTCHA_INDICATORS = [
     "captcha",
@@ -37,7 +36,7 @@ _CAPTCHA_INDICATORS = [
 ]
 
 
-def google_search(driver: Chrome, query: str, config: Config) -> dict[str, SearchResult]:
+def google_search(page: Page, query: str, config: Config) -> dict[str, SearchResult]:
     all_results: dict[str, SearchResult] = {}
 
     for attempt in range(config.max_search_attempts):
@@ -48,40 +47,40 @@ def google_search(driver: Chrome, query: str, config: Config) -> dict[str, Searc
             _random_delay(1, 3)
 
             if attempt == 0:
-                driver.delete_all_cookies()
+                page.context.clear_cookies()
 
             logger.info("Navigating to: %s", search_url)
-            driver.get(search_url)
+            page.goto(search_url, wait_until="domcontentloaded")
             _random_delay(2, 4)
 
-            _wait_for_captcha(driver, f"search-{attempt + 1}")
+            _wait_for_captcha(page, f"search-{attempt + 1}")
 
             if search_url == "https://www.google.com":
-                _handle_consent_popup(driver)
-                _type_and_search(driver, query)
-                _wait_for_captcha(driver, f"search-{attempt + 1}-results")
+                _handle_consent_popup(page)
+                _type_and_search(page, query)
+                _wait_for_captcha(page, f"search-{attempt + 1}-results")
                 continue
 
-            _handle_consent_popup(driver)
-            _human_scroll(driver)
+            _handle_consent_popup(page)
+            _human_scroll(page)
 
-            for page in range(1, config.max_search_pages + 1):
-                _wait_for_captcha(driver, f"search-{attempt + 1}-page-{page}")
+            for page_num in range(1, config.max_search_pages + 1):
+                _wait_for_captcha(page, f"search-{attempt + 1}-page-{page_num}")
 
                 if config.screenshots:
-                    _save_screenshot(driver, query, attempt, page)
+                    _save_screenshot(page, query, attempt, page_num)
 
-                page_results = _extract_search_results(driver, config.excluded_sites)
+                page_results = _extract_search_results(page, config.excluded_sites)
                 if page_results:
-                    logger.info("Found %d results on page %d", len(page_results), page)
+                    logger.info("Found %d results on page %d", len(page_results), page_num)
                     for title, result in page_results.items():
                         if title not in all_results:
                             all_results[title] = result
                 else:
-                    logger.info("No results on page %d", page)
+                    logger.info("No results on page %d", page_num)
 
-                if page < config.max_search_pages:
-                    success = _navigate_next_page(driver)
+                if page_num < config.max_search_pages:
+                    success = _navigate_next_page(page)
                     if not success:
                         logger.info("No more pages available")
                         break
@@ -96,26 +95,25 @@ def google_search(driver: Chrome, query: str, config: Config) -> dict[str, Searc
     return all_results
 
 
-def detect_captcha(driver: Chrome) -> bool:
+def detect_captcha(page: Page) -> bool:
     try:
-        page_text = driver.page_source.lower()
+        page_text = page.content().lower()
 
         for indicator in _CAPTCHA_INDICATORS:
             if indicator in page_text:
                 logger.warning("CAPTCHA text indicator found: %r", indicator)
                 return True
 
-        iframes = driver.find_elements(By.TAG_NAME, "iframe")
+        iframes = page.locator("iframe").element_handles()
         for iframe in iframes:
             src = (iframe.get_attribute("src") or "").lower()
             if "recaptcha" in src or "captcha" in src:
                 logger.warning("CAPTCHA iframe found: %s", src[:100])
                 return True
 
-        captcha_elements = driver.find_elements(
-            By.XPATH,
-            "//*[contains(@class, 'g-recaptcha') or contains(@class, 'captcha') or contains(@id, 'captcha')]",
-        )
+        captcha_elements = page.locator(
+            "//*[contains(@class, 'g-recaptcha') or contains(@class, 'captcha') or contains(@id, 'captcha')]"
+        ).element_handles()
         if captcha_elements:
             logger.warning("CAPTCHA element found on page")
             return True
@@ -126,8 +124,8 @@ def detect_captcha(driver: Chrome) -> bool:
     return False
 
 
-def wait_for_captcha(driver: Chrome, label: str = "") -> None:
-    if not detect_captcha(driver):
+def wait_for_captcha(page: Page, label: str = "", on_captcha: Callable[[bool], None] | None = None) -> None:
+    if not detect_captcha(page):
         return
 
     logger.warning("=" * 50)
@@ -142,16 +140,26 @@ def wait_for_captcha(driver: Chrome, label: str = "") -> None:
     print("  -> The script will continue automatically when done.")
     print("!" * 50 + "\n")
 
-    start = time.monotonic()
-    while time.monotonic() - start < _CAPTCHA_TIMEOUT:
-        time.sleep(3)
-        if not detect_captcha(driver):
-            logger.info("CAPTCHA solved! Continuing...")
-            print("\n  CAPTCHA solved. Resuming...\n")
-            return
+    if on_captcha is not None:
+        on_captcha(True)
 
-    logger.error("CAPTCHA wait timed out after %d seconds", _CAPTCHA_TIMEOUT)
-    raise TimeoutError(f"CAPTCHA not solved within {_CAPTCHA_TIMEOUT} seconds. Restart the script and try again.")
+    start = time.monotonic()
+    try:
+        while time.monotonic() - start < _CAPTCHA_TIMEOUT:
+            time.sleep(3)
+            if not detect_captcha(page):
+                logger.info("CAPTCHA solved! Continuing...")
+                print("\n  CAPTCHA solved. Resuming...\n")
+                if on_captcha is not None:
+                    on_captcha(False)
+                return
+
+        logger.error("CAPTCHA wait timed out after %d seconds", _CAPTCHA_TIMEOUT)
+        raise TimeoutError(f"CAPTCHA not solved within {_CAPTCHA_TIMEOUT} seconds. Restart the script and try again.")
+    except BaseException:
+        if on_captcha is not None:
+            on_captcha(False)
+        raise
 
 
 _wait_for_captcha = wait_for_captcha
@@ -209,12 +217,13 @@ def _random_delay(min_s: float = 0.5, max_s: float = 2.0) -> None:
     time.sleep(random.uniform(min_s, max_s))
 
 
-def _human_scroll(driver: Chrome, times: int = 2) -> None:
+def _human_scroll(page: Page, times: int = 2) -> None:
     for _ in range(times):
         delta = random.randint(100, 400)
-        driver.execute_script(f"window.scrollBy(0, {delta});")
-        _random_delay(0.3, 0.8)
-    driver.execute_script(f"window.scrollBy(0, {-random.randint(50, 150)});")
+        page.mouse.wheel(0, delta)
+        time.sleep(random.uniform(0.3, 0.8))
+    page.mouse.wheel(0, -random.randint(50, 150))
+    time.sleep(0.2)
     _random_delay(0.2, 0.5)
 
 
@@ -241,110 +250,76 @@ def _build_search_url(query: str, attempt: int) -> str:
     return f"https://www.google.com/search?q={urllib.parse.quote_plus(modified)}"
 
 
-def _handle_consent_popup(driver: Chrome) -> None:
+def _handle_consent_popup(page: Page) -> None:
     try:
-        buttons = driver.find_elements(
-            By.XPATH,
-            "//button[contains(., 'Accept') or contains(., 'Agree') or contains(., 'Accept all') or contains(., 'I agree') or contains(., 'Consent')]",
-        )
-        if buttons:
-            buttons[0].click()
-            time.sleep(2)
+        page.locator(
+            "//button[contains(., 'Accept') or contains(., 'Agree') or contains(., 'Accept all') or contains(., 'I agree') or contains(., 'Consent')]"
+        ).click(timeout=5000)
+        time.sleep(1.5)
     except Exception:
         pass
 
 
-def _type_and_search(driver: Chrome, query: str) -> None:
+def _type_and_search(page: Page, query: str) -> None:
     try:
-        box = driver.find_element(By.NAME, "q")
-        box.clear()
-        for char in query:
-            box.send_keys(char)
-            time.sleep(random.uniform(0.02, 0.08))
+        search_box = page.locator('[name="q"]')
+        search_box.wait_for(state="attached", timeout=5000)
+        search_box.click()
+        time.sleep(random.uniform(0.3, 0.8))
+        search_box.press_sequentially(query, delay=random.randint(20, 80))
         _random_delay(0.3, 0.6)
-        box.send_keys(Keys.RETURN)
+        page.keyboard.press("Enter")
         _random_delay(2, 4)
     except Exception as e:
         logger.error("Error typing search query: %s", e)
 
 
-def _save_screenshot(driver: Chrome, query: str, attempt: int, page: int) -> None:
+def _save_screenshot(page: Page, query: str, attempt: int, page_num: int) -> None:
     try:
         safe_query = re.sub(r"[^a-zA-Z0-9]", "_", query)[:30]
-        path = f"screenshot_{safe_query}_a{attempt}_p{page}.png"
-        driver.save_screenshot(path)
+        path = f"screenshot_{safe_query}_a{attempt}_p{page_num}.png"
+        page.screenshot(path=path)
         logger.info("Screenshot saved: %s", path)
     except Exception as e:
         logger.error("Failed to save screenshot: %s", e)
 
 
-def _extract_search_results(driver: Chrome, excluded_sites: list[str] | None = None) -> dict[str, SearchResult]:
+def _extract_search_results(page: Page, excluded_sites: list[str] | None = None) -> dict[str, SearchResult]:
     results: dict[str, SearchResult] = {}
 
-    html = driver.page_source
+    html = page.content()
     soup = BeautifulSoup(html, "html.parser")
 
-    selectors = [
-        ("div", {"class": lambda c: c and any(x in (c.split()) for x in ["g", "tF2Cxc", "yuRUbf"])}),
-        ("div", {"data-hveid": True}),
-        ("a", {"href": lambda h: h and h.startswith("http") and "google" not in h}),
-    ]
+    parsed_bs4 = soup.select("div.g, div.tF2Cxc, div.yuRUbf")
+    if not parsed_bs4:
+        parsed_bs4 = soup.select("div[data-hveid]")
 
-    parsed: list = []
-    for tag, attrs in selectors:
-        found = soup.find_all(tag, attrs)  # type: ignore[arg-type]
-        if found:
-            parsed = found
-            break
-
-    if not parsed:
-        parsed = _selenium_fallback(driver)
-
-    for result in parsed:
+    for result in parsed_bs4:
         try:
-            link_elem = result.find("a") if getattr(result, "name", "") != "a" else result
-            if not link_elem:
+            link_elem = result if result.name == "a" else result.find("a")
+            if not link_elem or not hasattr(link_elem, "get"):
                 continue
-            href = link_elem.get("href")
-            if not href:
+            href_val = link_elem.get("href", "")
+            if isinstance(href_val, list):
+                continue
+            if not href_val:
                 continue
 
             title_elem = result.find("h3")
-            title = title_elem.get_text() if title_elem else link_elem.get_text()
+            title = (
+                title_elem.get_text()
+                if title_elem
+                else str(link_elem.get_text() if hasattr(link_elem, "get_text") else "")
+            )
             if not title:
                 title = "Unknown"
 
-            if _is_valid_result(href, excluded_sites):
-                results[title] = SearchResult(title=title, url=href)
+            if _is_valid_result(href_val, excluded_sites):
+                results[title] = SearchResult(title=title, url=href_val)
         except Exception:
             logger.exception("Error parsing search result")
 
     return results
-
-
-def _selenium_fallback(driver: Chrome) -> list:
-    from selenium.webdriver.support import expected_conditions as EC
-    from selenium.webdriver.support.ui import WebDriverWait
-
-    items: list = []
-    selectors = ["div.g", "div.yuRUbf", "div.tF2Cxc"]
-
-    for sel in selectors:
-        try:
-            elements = WebDriverWait(driver, 3).until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, sel)))
-            if elements:
-                items = elements
-                break
-        except Exception:
-            continue
-
-    if not items:
-        try:
-            items = driver.find_elements(By.XPATH, "//a[contains(@href, 'http') and not(contains(@href, 'google'))]")
-        except Exception:
-            pass
-
-    return items
 
 
 def _is_valid_result(url: str, excluded_sites: list[str] | None = None) -> bool:
@@ -365,7 +340,7 @@ def _is_valid_result(url: str, excluded_sites: list[str] | None = None) -> bool:
         return False
 
 
-def _navigate_next_page(driver: Chrome) -> bool:
+def _navigate_next_page(page: Page) -> bool:
     try:
         selectors = [
             "//a[@id='pnnext']",
@@ -375,15 +350,15 @@ def _navigate_next_page(driver: Chrome) -> bool:
         ]
 
         for sel in selectors:
-            elements = driver.find_elements(By.XPATH, sel)
-            if elements:
-                driver.execute_script("arguments[0].scrollIntoView(true);", elements[0])
-                _random_delay(0.5, 1.5)
-                elements[0].click()
-                _random_delay(3, 5)
+            try:
+                with page.expect_navigation(timeout=5000):
+                    page.locator(sel).click(timeout=4000)
+                _random_delay(1, 2)
                 return True
+            except Exception:
+                continue
 
-        current_url = driver.current_url
+        current_url = page.url
         if "start=" in current_url:
             match = re.search(r"start=(\d+)", current_url)
             if match:
@@ -394,9 +369,8 @@ def _navigate_next_page(driver: Chrome) -> bool:
         else:
             sep = "&" if "?" in current_url else "?"
             next_url = f"{current_url}{sep}start=10"
-
-        driver.get(next_url)
-        _random_delay(3, 5)
+        page.goto(next_url, wait_until="domcontentloaded")
+        _random_delay(2, 3)
         return True
 
     except Exception:

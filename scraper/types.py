@@ -10,6 +10,7 @@ class ContactInfo:
     country: str = "Not Found"
     state: str = "Not Found"
     city: str = "Not Found"
+    company_name: str = "Not Found"
     products: str = ""
     contact_person: str = "Not Found"
     position: str = "Not Found"

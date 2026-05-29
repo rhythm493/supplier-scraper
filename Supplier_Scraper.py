@@ -29,12 +29,12 @@ subprocess.check_call([
 
 # --- Search queries ---
 SEARCH_QUERIES = [
-    # "CSSD distributor in Africa",
+    "CSSD distributor in Africa",
     "Sterilization Reel distributor in Africa",
     "Sterilization pouches distributor in Africa",
-    # "Sterilization rolls supplier in Africa",
-    # "Doctor Gown distributor in Africa",
-    # "Sterile Gown supplier in Africa",
+    "Sterilization rolls supplier in Africa",
+    "Doctor Gown distributor in Africa",
+    "Sterile Gown supplier in Africa",
 ]
 
 # --- Excluded sites (lowercase, partial match) ---
@@ -99,9 +99,9 @@ ECOMMERCE_INDICATORS = [
 OUTPUT_FILE = "CSSD_suppliers_africa.xlsx"
 
 # --- Tuning ---
-MAX_PAGES = 1
+MAX_PAGES = 5
 MAX_ATTEMPTS = 5
-PAGE_TIMEOUT = 25
+PAGE_TIMEOUT = 15
 SCREENSHOTS = False
 
 # %%
