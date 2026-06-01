@@ -28,7 +28,7 @@ jobs:
 
       - name: Rename binary with version tag
         run: |
-          cp dist/SupplierScraper/SupplierScraper dist/SupplierScraper-${{ github.ref_name }}-linux
+          cp dist/SupplierScraper dist/SupplierScraper-${{ github.ref_name }}-linux
 
       - name: Upload binary to release
         uses: softprops/action-gh-release@v2
@@ -58,7 +58,7 @@ jobs:
 
       - name: Rename binary with version tag
         run: |
-          copy dist\SupplierScraper\SupplierScraper.exe dist\SupplierScraper-${{ github.ref_name }}-windows.exe
+          copy dist\SupplierScraper.exe dist\SupplierScraper-${{ github.ref_name }}-windows.exe
 
       - name: Upload binary to release
         uses: softprops/action-gh-release@v2
