@@ -49,7 +49,6 @@ def main() -> int:
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 
-
     logging.getLogger().info("Starting Supplier Scraper GUI...")
     print("=" * 50)
     print(f"  Supplier Scraper v{VERSION}")
