@@ -1,8 +1,28 @@
 from __future__ import annotations
 
+import threading
+
+from nicegui import app as nicegui_app
 from nicegui import ui
 
 from gui import pages
+from gui.state import update_state
+from scraper import __version__
+from scraper.updater import check_for_update
+
+
+def _background_update_check() -> None:
+    def work():
+        info = check_for_update()
+        update_state["available"] = info.available
+        update_state["latest_version"] = info.latest_version
+        update_state["download_url"] = info.download_url
+        update_state["release_url"] = info.release_url
+        update_state["asset_name"] = info.asset_name
+        update_state["size"] = info.size
+        update_state["error"] = info.error
+
+    threading.Thread(target=work, daemon=True).start()
 
 
 @ui.page("/")
@@ -28,10 +48,14 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helv
     ui.query("body").classes("bg-slate-100")
 
     with ui.header().classes("bg-gradient-to-r from-slate-800 to-slate-700 shadow-md q-py-md q-px-lg"):
-        ui.markdown("# Supplier Scraper").classes("text-white text-h5 q-mb-none")
-        ui.markdown("Extract supplier and manufacturer data from Google Search results.").classes(
-            "text-slate-400 text-body2 q-mb-none"
-        )
+        with ui.row().classes("items-center justify-between w-full"):
+            with ui.column().classes("gap-0"):
+                ui.markdown("# Supplier Scraper").classes("text-white text-h5 q-mb-none")
+                ui.markdown("Extract supplier and manufacturer data from Google Search results.").classes(
+                    "text-slate-400 text-body2 q-mb-none"
+                )
+            with ui.row().classes("items-center gap-2"):
+                version_badge = ui.badge(f"v{__version__}", color="slate-600").props("outline")
 
     with ui.element("div").classes("max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6"):
         with ui.tabs().classes("w-full") as tabs:
@@ -49,3 +73,17 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helv
                 pages.history.create()
             with ui.tab_panel(tab_help):
                 pages.help.create()
+
+    poll_timer = ui.timer(2, lambda: None, once=False)
+
+    def _poll_update():
+        if update_state["available"]:
+            tab_help.props('badge="●"')
+            version_badge.set_text(f"v{update_state['latest_version']} available")
+            version_badge.props('color="positive"')
+            poll_timer.deactivate()
+
+    poll_timer = ui.timer(2, _poll_update, once=False)
+
+
+nicegui_app.on_startup(_background_update_check)

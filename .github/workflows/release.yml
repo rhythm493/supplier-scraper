@@ -4,6 +4,9 @@ on:
   push:
     tags: ["v*"]
 
+env:
+  VERSION: ${{ github.ref_name }}  # e.g. v3.1.0
+
 jobs:
   build-linux:
     runs-on: ubuntu-latest
@@ -25,15 +28,56 @@ jobs:
 
       - name: Build with PyInstaller
         run: pyinstaller build/scraper.spec --clean --noconfirm
+        env:
+          VERSION: ${{ github.ref_name }}
 
-      - name: Rename binary with version tag
+      - name: Create AppImage
         run: |
-          cp dist/SupplierScraper dist/SupplierScraper-${{ github.ref_name }}-linux
+          # Build AppDir structure
+          APPDIR=dist/SupplierScraper.AppDir
+          mkdir -p "$APPDIR/usr/bin" "$APPDIR/usr/share/applications"
+          cp dist/SupplierScraper "$APPDIR/usr/bin/"
+          cp build/supplier-scraper.desktop "$APPDIR/"
+          cp build/supplier-scraper.desktop "$APPDIR/usr/share/applications/"
 
-      - name: Upload binary to release
+          # AppRun entry point
+          cat > "$APPDIR/AppRun" << 'EOF'
+          #!/bin/bash
+          HERE="$(dirname "$(readlink -f "${0}")")"
+          exec "$HERE/usr/bin/SupplierScraper" "$@"
+          EOF
+          chmod +x "$APPDIR/AppRun"
+
+          # Generate placeholder icon (1x1 PNG)
+          python3 -c "
+          import struct, zlib
+          def create_png(path):
+              sig = b'\\x89PNG\\r\\n\\x1a\\n'
+              ihdr_data = struct.pack('>IIBBBBB', 1, 1, 8, 2, 0, 0, 0)
+              ihdr_crc = zlib.crc32(b'IHDR' + ihdr_data)
+              ihdr = struct.pack('>I', 13) + b'IHDR' + ihdr_data + struct.pack('>I', ihdr_crc & 0xffffffff)
+              raw = zlib.compress(b'\\x00\\x00\\x00\\x00')
+              idat_crc = zlib.crc32(b'IDAT' + raw)
+              idat = struct.pack('>I', len(raw)) + b'IDAT' + raw + struct.pack('>I', idat_crc & 0xffffffff)
+              iend_crc = zlib.crc32(b'IEND')
+              iend = struct.pack('>I', 0) + b'IEND' + struct.pack('>I', iend_crc & 0xffffffff)
+              with open(path, 'wb') as f:
+                  f.write(sig + ihdr + idat + iend)
+          create_png('$APPDIR/supplier-scraper.png')
+          "
+
+          # Download appimagetool
+          wget -q "https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage" -O /tmp/appimagetool
+          chmod +x /tmp/appimagetool
+
+          # Extract and run (FUSE may not work in CI)
+          /tmp/appimagetool --no-appstream "$APPDIR" "dist/SupplierScraper-${VERSION}-x86_64.AppImage"
+
+      - name: Upload assets to release
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/SupplierScraper-${{ github.ref_name }}-linux
+          files: |
+            dist/SupplierScraper-${{ github.ref_name }}-x86_64.AppImage
 
   build-windows:
     runs-on: windows-latest
@@ -55,12 +99,19 @@ jobs:
 
       - name: Build with PyInstaller
         run: pyinstaller build/scraper.spec --clean --noconfirm
+        env:
+          VERSION: ${{ github.ref_name }}
 
-      - name: Rename binary with version tag
+      - name: Install Inno Setup
         run: |
-          copy dist\SupplierScraper.exe dist\SupplierScraper-${{ github.ref_name }}-windows.exe
+          choco install innosetup --no-progress --confirm
 
-      - name: Upload binary to release
+      - name: Build installer
+        run: |
+          iscc build/installer.iss /DMyAppVersion="${VERSION}"
+
+      - name: Upload assets to release
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/SupplierScraper-${{ github.ref_name }}-windows.exe
+          files: |
+            dist/SupplierScraper-${{ github.ref_name }}-setup.exe

@@ -7,6 +7,16 @@ import argparse
 import logging
 import multiprocessing
 import sys
+from importlib.metadata import version as _pkg_version
+
+
+def _get_version() -> str:
+    try:
+        return _pkg_version("supplier-scraper")
+    except Exception:
+        from scraper import __version__
+
+        return __version__
 
 
 def main() -> int:
@@ -14,9 +24,9 @@ def main() -> int:
 
     parser = argparse.ArgumentParser(description="Supplier Scraper GUI")
     parser.add_argument(
-        "--native",
+        "--browser",
         action="store_true",
-        help="Launch in native desktop window (requires pywebview + GTK/Qt)",
+        help="Open in web browser instead of native desktop window",
     )
     parser.add_argument(
         "--port",
@@ -24,15 +34,24 @@ def main() -> int:
         default=8080,
         help="Port to run the server on (default: 8080)",
     )
+    parser.add_argument(
+        "--version",
+        action="store_true",
+        help="Print version and exit",
+    )
     args = parser.parse_args()
+
+    VERSION = _get_version()
+
+    if args.version:
+        print(f"Supplier Scraper v{VERSION}")
+        return 0
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 
-    import gui.main  # noqa: F401
-
     logging.getLogger().info("Starting Supplier Scraper GUI...")
     print("=" * 50)
-    print("  Supplier Scraper GUI")
+    print(f"  Supplier Scraper v{VERSION}")
     print("=" * 50)
 
     from nicegui import ui
@@ -46,19 +65,20 @@ def main() -> int:
         "show": True,
     }
 
-    if args.native:
+    if not args.browser:
         try:
             import webview  # noqa: F401
 
             kwargs["native"] = True
             kwargs["show"] = False
         except ImportError:
-            logging.getLogger().warning("--native requires pywebview. Install: pip install pywebview")
-            kwargs["show"] = True
+            logging.getLogger().warning(
+                "pywebview not installed — falling back to browser. Install: pip install pywebview"
+            )
 
     ui.run(**kwargs)
     return 0
 
 
-if __name__ == "__main__":
+if __name__ in {"__main__", "__mp_main__"}:
     sys.exit(main())
