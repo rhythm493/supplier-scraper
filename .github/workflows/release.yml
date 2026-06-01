@@ -66,11 +66,13 @@ jobs:
           create_png('$APPDIR/supplier-scraper.png')
           "
 
+          # Install FUSE for appimagetool
+          sudo apt-get update -qq && sudo apt-get install -y -qq fuse
+
           # Download appimagetool
           wget -q "https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage" -O /tmp/appimagetool
           chmod +x /tmp/appimagetool
 
-          # Extract and run (FUSE may not work in CI)
           /tmp/appimagetool --no-appstream "$APPDIR" "dist/SupplierScraper-${VERSION}-x86_64.AppImage"
 
       - name: Upload assets to release
@@ -107,8 +109,7 @@ jobs:
           choco install innosetup --no-progress --confirm
 
       - name: Build installer
-        run: |
-          iscc build/installer.iss /DMyAppVersion="${VERSION}"
+        run: iscc build/installer.iss /DMyAppVersion=$env:VERSION
 
       - name: Upload assets to release
         uses: softprops/action-gh-release@v2
