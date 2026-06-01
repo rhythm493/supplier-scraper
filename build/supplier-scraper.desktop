@@ -1,0 +1,9 @@
+[Desktop Entry]
+Name=Supplier Scraper
+Comment=Extract supplier and manufacturer data from Google Search results
+Exec=SupplierScraper
+Icon=supplier-scraper
+Type=Application
+Terminal=false
+Categories=Office;Business;
+StartupWMClass=SupplierScraper

@@ -15,7 +15,9 @@
 
 # %%
 # --- Install dependencies (run once) ---
-import subprocess, sys
+import subprocess
+import sys
+
 subprocess.check_call([
     sys.executable, "-m", "pip", "install", "-q",
     "-r", "scraper/requirements.txt",
@@ -108,9 +110,10 @@ SCREENSHOTS = False
 # %load_ext autoreload
 # %autoreload 2
 
-from scraper import Config, run_scraper
 from IPython.display import clear_output, display
-import pandas as pd
+
+from scraper import Config, run_scraper
+
 
 def on_progress(df, completed, total, found, name):
     clear_output(wait=True)

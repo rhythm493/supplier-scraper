@@ -199,6 +199,19 @@ scrape_state: dict[str, Any] = {
     "output_path": None,
 }
 
+update_state: dict[str, Any] = {
+    "available": False,
+    "latest_version": "",
+    "download_url": "",
+    "release_url": "",
+    "asset_name": "",
+    "size": 0,
+    "error": "",
+    "checking": False,
+    "downloading": False,
+    "download_progress": 0,
+}
+
 cancel_event: threading.Event | None = None
 
 

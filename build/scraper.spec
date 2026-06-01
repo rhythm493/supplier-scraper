@@ -1,5 +1,3 @@
-# -*- mode: python ; coding: utf-8 -*-
-#
 # PyInstaller spec for Supplier Scraper
 #
 # Build with (from project root):
@@ -9,12 +7,24 @@
 #
 
 import os
+import re
+
 import patchright as _patchright
-from PyInstaller.utils.hooks import collect_data_files, collect_submodules
+from PyInstaller.utils.hooks import collect_data_files
 
 block_cipher = None
 
 root = os.getcwd()
+
+# Inject version from env (set by CI from git tag)
+injected_version = os.environ.get("VERSION", "")
+if injected_version:
+    init_py = os.path.join(root, "scraper", "__init__.py")
+    with open(init_py) as f:
+        content = f.read()
+    content = re.sub(r'__version__\s*=\s*"[^"]*"', f'__version__ = "{injected_version}"', content)
+    with open(init_py, "w") as f:
+        f.write(content)
 
 _patchright_dir = os.path.dirname(_patchright.__file__)
 
@@ -35,7 +45,9 @@ a = Analysis(
         "scraper.search",
         "scraper.session",
         "scraper.types",
+        "scraper.updater",
         "scraper.validators",
+        "packaging",
         "gui",
         "gui.state",
         "gui.main",

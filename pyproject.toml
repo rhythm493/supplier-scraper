@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "supplier-scraper"
-version = "1.0.0"
+dynamic = ["version"]
 description = "Google-based supplier/medical device manufacturer scraper with GUI"
 requires-python = ">=3.11"
 dependencies = [
@@ -13,8 +13,13 @@ dependencies = [
     "openpyxl==3.1.5",
     "beautifulsoup4==4.14.3",
     "nicegui>=3.12.0",
+    "packaging>=24.0",
+    "pywebview>=6.0",
     "requests>=2.31.0",
 ]
+
+[tool.setuptools.dynamic]
+version = {attr = "scraper.__version__"}
 
 [project.optional-dependencies]
 dev = [
