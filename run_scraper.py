@@ -12,11 +12,12 @@ from importlib.metadata import version as _pkg_version
 
 def _get_version() -> str:
     try:
-        return _pkg_version("supplier-scraper")
+        ver = _pkg_version("supplier-scraper")
     except Exception:
         from scraper import __version__
 
-        return __version__
+        ver = __version__
+    return ver.removeprefix("v")
 
 
 def main() -> int:
