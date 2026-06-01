@@ -74,15 +74,16 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helv
             with ui.tab_panel(tab_help):
                 pages.help.create()
 
+    poll_timer = ui.timer(2, lambda: None, once=False)
+
     def _poll_update():
         if update_state["available"]:
             tab_help.props('badge="●"')
             version_badge.set_text(f"v{update_state['latest_version']} available")
             version_badge.props('color="positive"')
-            return
-        ui.timer(5, lambda: None, once=True)
+            poll_timer.deactivate()
 
-    ui.timer(2, _poll_update, once=True)
+    poll_timer = ui.timer(2, _poll_update, once=False)
 
 
 nicegui_app.on_startup(_background_update_check)

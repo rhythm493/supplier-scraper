@@ -15,7 +15,7 @@ from packaging.version import Version
 
 from scraper import __version__
 
-REPO = "anomalyco/ORO"
+REPO = "rhythm493/supplier-scraper"
 API_URL = f"https://api.github.com/repos/{REPO}/releases/latest"
 TIMEOUT = 15
 
@@ -41,14 +41,11 @@ def _normalize_tag(tag: str) -> str:
 def _platform_asset_suffix() -> str:
     system = platform.system().lower()
     if system == "windows":
-        return "windows.exe"
+        return ".exe"
     if system == "linux":
-        machine = platform.machine().lower()
-        if machine in ("x86_64", "amd64"):
-            return "linux-x86_64.AppImage"
-        return f"linux-{machine}.AppImage"
+        return ".AppImage"
     if system == "darwin":
-        return "macos.dmg"
+        return ".dmg"
     return system
 
 
@@ -129,16 +126,18 @@ def download_update(
     url: str,
     on_progress: Callable[[int, int], None] | None = None,
 ) -> Path | None:
+    fd = None
     try:
         resp = requests.get(url, stream=True, timeout=TIMEOUT)
         resp.raise_for_status()
 
         total = int(resp.headers.get("content-length", 0))
         suffix = Path(urlparse(url).path).suffix or ".exe"
-        tmp = Path(tempfile.mktemp(suffix=suffix))
+        fd, tmp_path = tempfile.mkstemp(suffix=suffix)
+        tmp = Path(tmp_path)
 
         downloaded = 0
-        with open(tmp, "wb") as f:
+        with os.fdopen(fd, "wb") as f:
             for chunk in resp.iter_content(chunk_size=8192):
                 f.write(chunk)
                 downloaded += len(chunk)
@@ -149,6 +148,8 @@ def download_update(
 
     except Exception as e:
         log.error("Download failed: %s", e)
+        if fd is not None:
+            os.close(fd)
         return None
 
 
@@ -180,23 +181,8 @@ def apply_update(downloaded: Path) -> bool:
 
 
 def _apply_windows(downloaded: Path) -> bool:
-    target = _app_path().parent / downloaded.name
-    try:
-        os.replace(downloaded, target)
-        log.info("Replaced binary: %s", target)
-        return True
-    except PermissionError:
-        old = _app_path().with_name(_app_path().name + ".old")
-        try:
-            _app_path().rename(old)
-            os.replace(downloaded, _app_path())
-            old.unlink(missing_ok=True)
-            log.info("Replaced running binary via rename trick")
-            return True
-        except Exception:
-            log.warning("Permission denied — update will apply on next restart via installer")
-            _launch_installer(downloaded)
-            return True
+    _launch_installer(downloaded)
+    return True
 
 
 def _launch_installer(installer: Path) -> None:
@@ -217,18 +203,23 @@ def _launch_installer(installer: Path) -> None:
 
 def _apply_linux(downloaded: Path) -> bool:
     target = _app_path()
+    downloaded.chmod(0o755)
+
     try:
-        downloaded.chmod(0o755)
         os.replace(downloaded, target)
-        log.info("Replaced binary: %s", target)
         return True
-    except PermissionError:
+    except OSError:
         old = target.with_name(target.name + ".old")
-        target.rename(old)
-        downloaded.chmod(0o755)
-        os.replace(downloaded, target)
-        old.unlink(missing_ok=True)
-        return True
+        try:
+            os.replace(target, old)
+            os.replace(downloaded, target)
+            old.unlink(missing_ok=True)
+            return True
+        except OSError:
+            import shutil
+
+            shutil.copy2(downloaded, target)
+            return True
 
 
 def _apply_macos(downloaded: Path) -> bool:

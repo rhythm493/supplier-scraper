@@ -3,8 +3,8 @@
 ; Expects PyInstaller binary at: dist/SupplierScraper.exe
 
 #define MyAppName "Supplier Scraper"
-#define MyAppPublisher "anomalyco"
-#define MyAppURL "https://github.com/anomalyco/ORO"
+#define MyAppPublisher "rhythm493"
+#define MyAppURL "https://github.com/rhythm493/supplier-scraper"
 #define MyAppExeName "SupplierScraper.exe"
 
 #ifndef MyAppVersion

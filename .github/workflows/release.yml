@@ -35,7 +35,7 @@ jobs:
         run: |
           # Build AppDir structure
           APPDIR=dist/SupplierScraper.AppDir
-          mkdir -p "$APPDIR/usr/bin"
+          mkdir -p "$APPDIR/usr/bin" "$APPDIR/usr/share/applications"
           cp dist/SupplierScraper "$APPDIR/usr/bin/"
           cp build/supplier-scraper.desktop "$APPDIR/"
           cp build/supplier-scraper.desktop "$APPDIR/usr/share/applications/"
@@ -71,7 +71,7 @@ jobs:
           chmod +x /tmp/appimagetool
 
           # Extract and run (FUSE may not work in CI)
-          /tmp/appimagetool --no-appstream "$APPDIR" "dist/SupplierScraper-${{ github.ref_name }}-x86_64.AppImage"
+          /tmp/appimagetool --no-appstream "$APPDIR" "dist/SupplierScraper-${VERSION}-x86_64.AppImage"
 
       - name: Upload assets to release
         uses: softprops/action-gh-release@v2
@@ -108,9 +108,7 @@ jobs:
 
       - name: Build installer
         run: |
-          iscc build/installer.iss /DMyAppVersion="${{ github.ref_name }}"
-        env:
-          VERSION: ${{ github.ref_name }}
+          iscc build/installer.iss /DMyAppVersion="${VERSION}"
 
       - name: Upload assets to release
         uses: softprops/action-gh-release@v2
