@@ -5,5 +5,5 @@ Exec=SupplierScraper
 Icon=supplier-scraper
 Type=Application
 Terminal=false
-Categories=Office;Business;
+Categories=Office
 StartupWMClass=SupplierScraper
