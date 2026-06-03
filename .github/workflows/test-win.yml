@@ -31,6 +31,7 @@ jobs:
               countries=['South Africa', 'Kenya', 'Nigeria'],
               phone_prefixes=['+27', '+254', '+234'],
               phone_patterns=[r'\+\d{1,3}[\s-]?\d{2,4}[\s-]?\d{3,4}[\s-]?\d{3,4}'],
+              llm_model='',
           )
           df = run_scraper(config)
           df.to_excel('test_output.xlsx', index=False)

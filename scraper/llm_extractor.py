@@ -14,6 +14,31 @@ log = logging.getLogger(__name__)
 
 _MODEL_LOCK = threading.Lock()
 _MODEL_INSTANCE = None
+_LLM_DISABLED = False
+_LLM_FAILURES = 0
+_MAX_LLM_FAILURES = 3
+
+
+def _abort_handler(signum: int, _frame: object) -> None:
+    global _LLM_DISABLED
+    _LLM_DISABLED = True
+    raise RuntimeError("LLM model crashed — disabling further LLM extraction")
+
+
+_ABORT_HANDLER_INSTALLED = False
+
+
+def _install_abort_handler() -> None:
+    global _ABORT_HANDLER_INSTALLED
+    if _ABORT_HANDLER_INSTALLED:
+        return
+    _ABORT_HANDLER_INSTALLED = True
+    try:
+        import signal
+        if hasattr(signal, "SIGABRT"):
+            signal.signal(signal.SIGABRT, _abort_handler)
+    except Exception:
+        pass
 
 
 def _models_dir(config: Config) -> str:
@@ -165,6 +190,11 @@ def extract_fields(
     config: Config,
     fields: list[str] | None = None,
 ) -> dict[str, Any] | None:
+    global _LLM_DISABLED, _LLM_FAILURES
+    if _LLM_DISABLED:
+        return None
+
+    _install_abort_handler()
     model = _load_model(config)
     if model is None:
         return None
@@ -201,13 +231,20 @@ def extract_fields(
 
     except Exception as e:
         log.debug("LLM extraction failed for %s: %s", url, e)
+        _LLM_FAILURES += 1
+        if _LLM_FAILURES >= _MAX_LLM_FAILURES:
+            _LLM_DISABLED = True
         return None
 
 
 def verify_phone_country(phone: str, country: str, config: Config) -> bool | str | None:
+    global _LLM_DISABLED, _LLM_FAILURES
+    if _LLM_DISABLED:
+        return None
     if phone == "Not Found" or country == "Not Found":
         return None
 
+    _install_abort_handler()
     model = _load_model(config)
     if model is None:
         return None
@@ -237,4 +274,7 @@ def verify_phone_country(phone: str, country: str, config: Config) -> bool | str
 
     except Exception as e:
         log.debug("Phone-country verification failed: %s", e)
+        _LLM_FAILURES += 1
+        if _LLM_FAILURES >= _MAX_LLM_FAILURES:
+            _LLM_DISABLED = True
         return None
