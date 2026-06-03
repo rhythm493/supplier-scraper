@@ -79,6 +79,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: |
+            dist/SupplierScraper
             dist/SupplierScraper-${{ github.ref_name }}-x86_64.AppImage
 
   build-windows:
@@ -116,3 +117,4 @@ jobs:
         with:
           files: |
             dist/SupplierScraper-${{ github.ref_name }}-setup.exe
+            dist/SupplierScraper.exe
