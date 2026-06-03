@@ -199,6 +199,11 @@ scrape_state: dict[str, Any] = {
     "output_path": None,
 }
 
+model_download: dict[str, Any] = {
+    "status": "",
+    "message": "",
+}
+
 update_state: dict[str, Any] = {
     "available": False,
     "latest_version": "",

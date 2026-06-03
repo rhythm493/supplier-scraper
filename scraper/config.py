@@ -47,6 +47,8 @@ class Config:
     product_categories: list[str] = field(default_factory=list)
     ecommerce_indicators: list[str] = field(default_factory=list)
 
+    llm_model: str = "LFM2-350M-Extract"
+
     output_filename: str = "suppliers.xlsx"
     log_filename: str = "scraper.log"
 

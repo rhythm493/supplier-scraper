@@ -97,6 +97,8 @@ def extract_company_info(page: Page, url: str, name: str, config: Config) -> Con
                 if info:
                     contact = info
 
+        _llm_fill_gaps(contact, text, url, config, logger)
+
         if not _check_relevance(text, config.product_categories):
             logger.info("Not relevant to target categories: %s", url)
             return None
@@ -115,6 +117,32 @@ def extract_company_info(page: Page, url: str, name: str, config: Config) -> Con
     except Exception:
         logger.exception("Failed to extract info from %s", url)
         return None
+
+
+def _llm_fill_gaps(contact: ContactInfo, text: str, url: str, config: Config, logger: logging.Logger) -> None:
+    has_gaps = any(getattr(contact, f) == "Not Found" for f in ("email", "phone", "country", "state", "city"))
+    if not has_gaps:
+        return
+    try:
+        from scraper.llm_extractor import extract_fields, verify_phone_country
+
+        result = extract_fields(text, url, config)
+        if result:
+            for field in ("country", "state", "city", "phone", "email", "company_name", "products"):
+                if getattr(contact, field) == "Not Found" and result.get(field):
+                    setattr(contact, field, str(result[field]))
+            logger.info("LLM filled gaps: %s", {k: v for k, v in result.items() if v})
+
+        if contact.phone != "Not Found" and contact.country != "Not Found":
+            v = verify_phone_country(contact.phone, contact.country, config)
+            if v is not None and v is not True:
+                logger.warning(
+                    "Phone-country mismatch: phone=%s, country=%s, llm_says=%s", contact.phone, contact.country, v
+                )
+                if isinstance(v, str):
+                    contact.country = v
+    except Exception:
+        logger.debug("LLM fallback failed for %s", url, exc_info=True)
 
 
 def _scrape_page(page: Page, page_url: str, config: Config, existing: ContactInfo) -> ContactInfo | None:
@@ -177,6 +205,10 @@ def _scrape_page(page: Page, page_url: str, config: Config, existing: ContactInf
             if person != "Not Found":
                 contact.contact_person = person
                 contact.position = role
+
+        soup = BeautifulSoup(html, "html.parser")
+        _text = soup.get_text()
+        _llm_fill_gaps(contact, _text, page_url, config, logger)
 
         return contact
 

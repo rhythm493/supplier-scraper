@@ -57,6 +57,8 @@ def main() -> int:
 
     from nicegui import ui
 
+    import gui.main  # noqa: F401 — registers @ui.page("/")
+
     kwargs: dict = {
         "title": "Supplier Scraper",
         "host": "127.0.0.1",

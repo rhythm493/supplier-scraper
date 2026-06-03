@@ -6,7 +6,7 @@ from nicegui import ui
 
 from gui.state import update_state
 from scraper import __version__
-from scraper.updater import check_for_update, download_update
+from scraper.updater import apply_update, check_for_update, download_update
 
 
 def _do_check() -> None:
@@ -60,12 +60,18 @@ def _do_download() -> None:
     update_state["downloading"] = True
     update_state["status_text"] = "Downloading..."
     update_state["download_path"] = ""
+    update_state["applied"] = False
 
     def work():
         path = download_update(url)
         if path:
             update_state["download_path"] = str(path)
-            update_state["status_text"] = "Download complete"
+            applied = apply_update(path)
+            if applied:
+                update_state["applied"] = True
+                update_state["status_text"] = "Update applied — restart to complete"
+            else:
+                update_state["status_text"] = "Download complete — restart to apply"
         else:
             update_state["error"] = "Download failed"
             update_state["status_text"] = ""
@@ -110,8 +116,11 @@ Built with [NiceGUI](https://nicegui.io), packaged with [PyInstaller](https://py
                 update_btn.set_text("Retry")
             elif s["available"]:
                 size_mb = s["size"] / 1_048_576 if s["size"] else 0
-                if s["download_path"]:
-                    update_label.set_text("Downloaded — will apply on next launch")
+                if s.get("applied"):
+                    update_label.set_text("Update applied — restart to complete")
+                    update_btn.set_text("Done")
+                elif s["download_path"]:
+                    update_label.set_text("Downloaded — restart to apply")
                     update_btn.set_text("Done")
                 elif s["download_url"]:
                     update_label.set_text(f"v{s['latest_version']} available ({size_mb:.0f} MB)")

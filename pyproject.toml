@@ -16,6 +16,8 @@ dependencies = [
     "packaging>=24.0",
     "pywebview>=6.0",
     "requests>=2.31.0",
+    "llama-cpp-python>=0.3.25",
+    "huggingface-hub>=0.30.0",
 ]
 
 [tool.setuptools.dynamic]
